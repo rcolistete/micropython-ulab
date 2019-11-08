@@ -61,26 +61,40 @@ void fill_array_iterable(mp_float_t *array, mp_obj_t iterable) {
     }
 }
 
-void ndarray_print_row(const mp_print_t *print, mp_obj_array_t *data, size_t n0, size_t n) {
+void ndarray_print_value(const mp_print_t *print, mp_obj_array_t *data, 
+                         size_t n, uint8_t boolean) {
+    if(!boolean) {
+        mp_obj_print_helper(print, mp_binary_get_val_array(data->typecode, data->items, n), PRINT_REPR);
+    } else { // the array is a Boolean array, it must be of uint8_t type
+        if(((uint8_t *)data->items)[n]) {
+            mp_print_str(print, "True");
+        } else {
+            mp_print_str(print, "False");
+        }
+    }
+}
+
+void ndarray_print_row(const mp_print_t *print, mp_obj_array_t *data, 
+                       size_t n0, size_t n, uint8_t boolean) {
     mp_print_str(print, "[");
     size_t i;
     if(n < PRINT_MAX) { // if the array is short, print everything
-        mp_obj_print_helper(print, mp_binary_get_val_array(data->typecode, data->items, n0), PRINT_REPR);
+        ndarray_print_value(print, data, n0, boolean);
         for(i=1; i<n; i++) {
             mp_print_str(print, ", ");
-            mp_obj_print_helper(print, mp_binary_get_val_array(data->typecode, data->items, n0+i), PRINT_REPR);
+            ndarray_print_value(print, data, n0+i, boolean);
         }
     } else {
-        mp_obj_print_helper(print, mp_binary_get_val_array(data->typecode, data->items, n0), PRINT_REPR);
+        ndarray_print_value(print, data, n0, boolean);
         for(i=1; i<3; i++) {
             mp_print_str(print, ", ");
-            mp_obj_print_helper(print, mp_binary_get_val_array(data->typecode, data->items, n0+i), PRINT_REPR);
+            ndarray_print_value(print, data, n0+i, boolean);
         }
         mp_printf(print, ", ..., ");
-        mp_obj_print_helper(print, mp_binary_get_val_array(data->typecode, data->items, n0+n-3), PRINT_REPR);
+        ndarray_print_value(print, data, n0-3, boolean);
         for(size_t i=1; i<3; i++) {
             mp_print_str(print, ", ");
-            mp_obj_print_helper(print, mp_binary_get_val_array(data->typecode, data->items, n0+n-3+i), PRINT_REPR);
+            ndarray_print_value(print, data, n0-3+i, boolean);
         }
     }
     mp_print_str(print, "]");
@@ -95,19 +109,21 @@ void ndarray_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t ki
         mp_print_str(print, "[]");
     } else {
         if((self->m == 1) || (self->n == 1)) {
-            ndarray_print_row(print, self->array, 0, self->array->len);
+            ndarray_print_row(print, self->array, 0, self->array->len, self->boolean);
         } else {
             // TODO: add vertical ellipses for the case, when self->m > PRINT_MAX
             mp_print_str(print, "[");
-            ndarray_print_row(print, self->array, 0, self->n);
+            ndarray_print_row(print, self->array, 0, self->n, self->boolean);
             for(size_t i=1; i < self->m; i++) {
                 mp_print_str(print, ",\n\t ");
-                ndarray_print_row(print, self->array, i*self->n, self->n);
+                ndarray_print_row(print, self->array, i*self->n, self->n, self->boolean);
             }
             mp_print_str(print, "]");
         }
     }
-    if(self->array->typecode == NDARRAY_UINT8) {
+    if(self->boolean) {
+        mp_print_str(print, ", dtype=bool)");
+    } else if(self->array->typecode == NDARRAY_UINT8) {
         mp_print_str(print, ", dtype=uint8)");
     } else if(self->array->typecode == NDARRAY_INT8) {
         mp_print_str(print, ", dtype=int8)");
@@ -120,12 +136,23 @@ void ndarray_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t ki
     }
 }
 
-void ndarray_assign_elements(mp_obj_array_t *data, mp_obj_t iterable, uint8_t typecode, size_t *idx) {
+void ndarray_assign_row(mp_obj_array_t *data, mp_obj_t iterable, uint8_t typecode, size_t *idx) {
     // assigns a single row in the matrix
     mp_obj_t item;
-    while ((item = mp_iternext(iterable)) != MP_OBJ_STOP_ITERATION) {
-        mp_binary_set_val_array(typecode, data->items, (*idx)++, item);
-    }
+    if(typecode == NDARRAY_BOOL) {
+        uint8_t *array = (uint8_t *)data->items;
+        while ((item = mp_iternext(iterable)) != MP_OBJ_STOP_ITERATION) {
+            if(mp_obj_is_true(item)) {
+                array[(*idx)] = 1;
+            } 
+            // we don't need to set False, because the array is initialised with straight zeros
+            (*idx)++;
+        }        
+    } else {
+        while ((item = mp_iternext(iterable)) != MP_OBJ_STOP_ITERATION) {
+            mp_binary_set_val_array(typecode, data->items, (*idx)++, item);
+        } 
+    } 
 }
 
 ndarray_obj_t *create_new_ndarray(size_t m, size_t n, uint8_t typecode) {
@@ -134,7 +161,13 @@ ndarray_obj_t *create_new_ndarray(size_t m, size_t n, uint8_t typecode) {
     ndarray->base.type = &ulab_ndarray_type;
     ndarray->m = m;
     ndarray->n = n;
-    mp_obj_array_t *array = array_new(typecode, m*n);
+    if(typecode == NDARRAY_BOOL) {
+        typecode = NDARRAY_UINT8;
+        ndarray->boolean = NDARRAY_BOOLEAN;
+    } else {
+        ndarray->boolean = NDARRAY_NUMERIC;        
+    }
+    mp_obj_array_t *array = array_new(typecode, m*n);    
     ndarray->bytes = m * n * mp_binary_get_size('@', typecode, NULL);
     // this should set all elements to 0, irrespective of the of the typecode (all bits are zero)
     // we could, perhaps, leave this step out, and initialise the array only, when needed
@@ -161,6 +194,7 @@ STATIC uint8_t ndarray_init_helper(size_t n_args, const mp_obj_t *pos_args, mp_m
     mp_arg_parse_all(1, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
     
     uint8_t dtype = args[1].u_int;
+    // at this point, dtype can still be `?` for Boolean arrays
     return dtype;
 }
 
@@ -201,14 +235,14 @@ mp_obj_t ndarray_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw,
     iterable1 = mp_getiter(args[0], &iter_buf1);
     i = 0;
     if(len2 == 0) { // the first argument is a single iterable
-        ndarray_assign_elements(self->array, iterable1, dtype, &i);
+        ndarray_assign_row(self->array, iterable1, dtype, &i);
     } else {
         mp_obj_iter_buf_t iter_buf2;
         mp_obj_t iterable2; 
 
         while ((item1 = mp_iternext(iterable1)) != MP_OBJ_STOP_ITERATION) {
             iterable2 = mp_getiter(item1, &iter_buf2);
-            ndarray_assign_elements(self->array, iterable2, dtype, &i);
+            ndarray_assign_row(self->array, iterable2, dtype, &i);
         }
     }
     return MP_OBJ_FROM_PTR(self);
@@ -277,7 +311,7 @@ void insert_binary_value(ndarray_obj_t *ndarray, size_t nd_index, ndarray_obj_t 
     // there is probably a more elegant implementation...
     mp_obj_t tmp = mp_binary_get_val_array(values->array->typecode, values->array->items, value_index);
     if((values->array->typecode == NDARRAY_FLOAT) && (ndarray->array->typecode != NDARRAY_FLOAT)) {
-        // workaround: rounding seems not to work in the arm compiler
+        // this is a workaround: rounding seems not to work in the arm compiler
         int32_t x = (int32_t)floorf(mp_obj_get_float(tmp)+0.5);
         tmp = mp_obj_new_int(x);
     }

@@ -18,6 +18,9 @@
 
 #define PRINT_MAX  10
 
+#define NDARRAY_NUMERIC   0
+#define NDARRAY_BOOLEAN   1
+
 #if MICROPY_FLOAT_IMPL == MICROPY_FLOAT_IMPL_FLOAT
 #define FLOAT_TYPECODE 'f'
 #elif MICROPY_FLOAT_IMPL == MICROPY_FLOAT_IMPL_DOUBLE
@@ -27,6 +30,7 @@
 const mp_obj_type_t ulab_ndarray_type;
 
 enum NDARRAY_TYPE {
+    NDARRAY_BOOL = '?', // this must never be assigned to the typecode!
     NDARRAY_UINT8 = 'B',
     NDARRAY_INT8 = 'b',
     NDARRAY_UINT16 = 'H', 
@@ -36,6 +40,7 @@ enum NDARRAY_TYPE {
 
 typedef struct _ndarray_obj_t {
     mp_obj_base_t base;
+    uint8_t boolean;
     size_t m, n;
     size_t len;
     mp_obj_array_t *array;
@@ -47,9 +52,9 @@ mp_obj_t mp_obj_new_ndarray_iterator(mp_obj_t , size_t , mp_obj_iter_buf_t *);
 mp_float_t ndarray_get_float_value(void *, uint8_t , size_t );
 void fill_array_iterable(mp_float_t *, mp_obj_t );
 
-void ndarray_print_row(const mp_print_t *, mp_obj_array_t *, size_t , size_t );
+//void ndarray_print_row(const mp_print_t *, mp_obj_array_t *, size_t , size_t );
 void ndarray_print(const mp_print_t *, mp_obj_t , mp_print_kind_t );
-void ndarray_assign_elements(mp_obj_array_t *, mp_obj_t , uint8_t , size_t *);
+//void ndarray_assign_row(mp_obj_array_t *, mp_obj_t , uint8_t , size_t *);
 ndarray_obj_t *create_new_ndarray(size_t , size_t , uint8_t );
 
 mp_obj_t ndarray_copy(mp_obj_t );
@@ -97,27 +102,25 @@ mp_obj_t ndarray_asbytearray(mp_obj_t );
         return MP_OBJ_FROM_PTR(out);\
     } else if(((op) == MP_BINARY_OP_LESS) || ((op) == MP_BINARY_OP_LESS_EQUAL) ||  \
              ((op) == MP_BINARY_OP_MORE) || ((op) == MP_BINARY_OP_MORE_EQUAL)) {\
-        mp_obj_t out_list = mp_obj_new_list(0, NULL);\
-        size_t m = (ol)->m, n = (ol)->n;\
+        ndarray_obj_t *out = create_new_ndarray((ol)->m, (ol)->n, NDARRAY_UINT8);\
+        size_t m = out->m, n = out->n;\
+        out->boolean = NDARRAY_BOOLEAN;\
+        uint8_t *barray = (uint8_t *)out->array->items;\
         for(size_t i=0, r=0; i < m; i++, r+=inc) {\
-            mp_obj_t row = mp_obj_new_list(n, NULL);\
-            mp_obj_list_t *row_ptr = MP_OBJ_TO_PTR(row);\
             for(size_t j=0, s=0; j < n; j++, s+=inc) {\
-                row_ptr->items[j] = mp_const_false;\
+                barray[i*n + j] = 0;\
                 if((op) == MP_BINARY_OP_LESS) {\
-                    if(left[i*n+j] < right[r*n+s]) row_ptr->items[j] = mp_const_true;\
+                    if(left[i*n+j] < right[r*n+s]) barray[i*n + j] = 1;\
                 } else if((op) == MP_BINARY_OP_LESS_EQUAL) {\
-                    if(left[i*n+j] <= right[r*n+s]) row_ptr->items[j] = mp_const_true;\
+                    if(left[i*n+j] <= right[r*n+s]) barray[i*n + j] = 1;\
                 } else if((op) == MP_BINARY_OP_MORE) {\
-                    if(left[i*n+j] > right[r*n+s]) row_ptr->items[j] = mp_const_true;\
+                    if(left[i*n+j] > right[r*n+s]) barray[i*n + j] = 1;\
                 } else if((op) == MP_BINARY_OP_MORE_EQUAL) {\
-                    if(left[i*n+j] >= right[r*n+s]) row_ptr->items[j] = mp_const_true;\
+                    if(left[i*n+j] >= right[r*n+s]) barray[i*n + j] = 1;\
                 }\
             }\
-            if(m == 1) return row;\
-            mp_obj_list_append(out_list, row);\
         }\
-        return out_list;\
+        return MP_OBJ_FROM_PTR(out);\
     }\
 } while(0)
 

@@ -49,6 +49,16 @@ mp_obj_t numerical_argsort(size_t , const mp_obj_t *, mp_map_t *);
     }\
 } while(0)
 
+#define RUN_SUM(ndarray, type, optype, len, start, increment) do {\
+    type *array = (type *)(ndarray)->array->items;\
+    type value;\
+    for(size_t j=0; j < (len); j++) {\
+        value = array[(start)+j*(increment)];\
+        sum += value;\
+        if((optype) == NUMERICAL_STD) { sq_sum += value*value; }\
+    }\
+} while(0)
+
 #define CALCULATE_DIFF(in, out, type, M, N, inn, increment) do {\
     type *source = (type *)(in)->array->items;\
     type *target = (type *)(out)->array->items;\

@@ -77,7 +77,7 @@ mp_obj_t numerical_linspace(size_t n_args, const mp_obj_t *pos_args, mp_map_t *k
     }
 }
 
-mp_obj_t numerical_sum_mean_std_array(mp_obj_t oin, uint8_t optype) {
+mp_obj_t numerical_sum_mean_std_iterable(mp_obj_t oin, uint8_t optype) {
     mp_float_t value, sum = 0.0, sq_sum = 0.0;
     mp_obj_iter_buf_t iter_buf;
     mp_obj_t item, iterable = mp_getiter(oin, &iter_buf);
@@ -99,62 +99,54 @@ mp_obj_t numerical_sum_mean_std_array(mp_obj_t oin, uint8_t optype) {
     }
 }
 
-STATIC mp_float_t numerical_sum_mean_std_single_line(void *data, size_t start, size_t stop, 
-                                                  size_t stride, uint8_t typecode, uint8_t optype) {
-    
-    mp_float_t sum = 0.0, sq_sum = 0.0, value;
-    size_t len = 0;
-    for(size_t i=start; i < stop; i+=stride, len++) {
-        value = ndarray_get_float_value(data, typecode, i);        
-        sum += value;
-        if(optype == NUMERICAL_STD) {
-            sq_sum += value*value;
+STATIC mp_obj_t numerical_sum_mean_std_ndarray(ndarray_obj_t *ndarray, mp_obj_t axis, uint8_t optype) {
+    size_t increment, start, start_inc, N, len; 
+    ndarray_obj_t *results;
+    if(axis == mp_const_none) { // flatten the array
+        results = create_new_ndarray(1, 1, NDARRAY_FLOAT);
+        len = ndarray->array->len;
+        N = 1;
+        increment = 1;
+        start_inc = len;
+    } else if((mp_obj_get_int(axis) == 1)) { // sum along the horizontal axis
+        results = create_new_ndarray(ndarray->m, 1, NDARRAY_FLOAT);
+        len = ndarray->n;
+        N = ndarray->m;
+        increment = 1;
+        start_inc = len;
+    } else { // sum along vertical axis
+        results = create_new_ndarray(1, ndarray->n, NDARRAY_FLOAT);
+        len = ndarray->m;
+        N = ndarray->n;
+        increment = ndarray->n;
+        start_inc = 1;
+    }
+    mp_float_t sum, sq_sum;
+    mp_float_t *farray = (mp_float_t *)results->array->items;
+    for(size_t j=0; j < N; j++) { // result index
+        start = j * start_inc;
+        sum = sq_sum = 0.0;
+        if(ndarray->array->typecode == NDARRAY_UINT8) {
+            RUN_SUM(ndarray, uint8_t, optype, len, start, increment);
+        } else if(ndarray->array->typecode == NDARRAY_INT8) {
+            RUN_SUM(ndarray, int8_t, optype, len, start, increment);
+        } else if(ndarray->array->typecode == NDARRAY_UINT16) {
+            RUN_SUM(ndarray, uint16_t, optype, len, start, increment);
+        } else if(ndarray->array->typecode == NDARRAY_INT16) {
+            RUN_SUM(ndarray, int16_t, optype, len, start, increment);
+        } else { // this will be mp_float_t, no need to check
+            RUN_SUM(ndarray, mp_float_t, optype, len, start, increment);
+        }
+        if(optype == NUMERICAL_SUM) {
+            farray[j] = sum;
+        } else if(optype == NUMERICAL_MEAN) {
+            farray[j] = sum / len;
+        } else {
+            sum /= len; // this is now the mean!
+            farray[j] = MICROPY_FLOAT_C_FUN(sqrt)(sq_sum/len-sum*sum);
         }
     }
-    if(len == 0) {
-        mp_raise_ValueError("data length is 0!");
-    }
-    if(optype ==  NUMERICAL_SUM) {
-        return sum;
-    } else if(optype == NUMERICAL_MEAN) {
-        return sum/len;
-    } else {
-        sum /= len; // this is now the mean!
-        return MICROPY_FLOAT_C_FUN(sqrt)(sq_sum/len-sum*sum);
-    }
-}
-
-STATIC mp_obj_t numerical_sum_mean_std_matrix(mp_obj_t oin, mp_obj_t axis, uint8_t optype) {
-    ndarray_obj_t *in = MP_OBJ_TO_PTR(oin);
-    if((axis == mp_const_none) || (in->m == 1) || (in->n == 1)) { 
-        // return the value for the flattened array
-        return mp_obj_new_float(numerical_sum_mean_std_single_line(in->array->items, 0, 
-                                                      in->array->len, 1, in->array->typecode, optype));
-    } else {
-        uint8_t _axis = mp_obj_get_int(axis);
-        size_t m = (_axis == 0) ? 1 : in->m;
-        size_t n = (_axis == 0) ? in->n : 1;
-        size_t len = in->array->len;
-        mp_float_t sms;
-        // TODO: pass in->array->typcode to create_new_ndarray
-        ndarray_obj_t *out = create_new_ndarray(m, n, NDARRAY_FLOAT);
-
-        // TODO: these two cases could probably be combined in a more elegant fashion...
-        if(_axis == 0) { // vertical
-            for(size_t i=0; i < n; i++) {
-                sms = numerical_sum_mean_std_single_line(in->array->items, i, len, 
-                                                               n, in->array->typecode, optype);
-                ((float_t *)out->array->items)[i] = sms;
-            }
-        } else { // horizontal
-            for(size_t i=0; i < m; i++) {
-                sms = numerical_sum_mean_std_single_line(in->array->items, i*in->n, 
-                                                               (i+1)*in->n, 1, in->array->typecode, optype);
-                ((float_t *)out->array->items)[i] = sms;
-            }
-        }
-    return MP_OBJ_FROM_PTR(out);
-    }
+    return MP_OBJ_FROM_PTR(results);
 }
 
 size_t numerical_argmin_argmax_array(ndarray_obj_t *in, size_t start, 
@@ -268,11 +260,11 @@ STATIC mp_obj_t numerical_argmin_argmax(mp_obj_t oin, mp_obj_t axis, uint8_t opt
 STATIC mp_obj_t numerical_function(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args, uint8_t type) {
     static const mp_arg_t allowed_args[] = {
         { MP_QSTR_, MP_ARG_REQUIRED | MP_ARG_OBJ, {.u_rom_obj = MP_ROM_PTR(&mp_const_none_obj)} } ,
-        { MP_QSTR_axis, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_rom_obj = MP_ROM_PTR(&mp_const_none_obj)} },
+        { MP_QSTR_axis, MP_ARG_OBJ, {.u_rom_obj = MP_ROM_PTR(&mp_const_none_obj)} },
     };
 
     mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
-    mp_arg_parse_all(1, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
+    mp_arg_parse_all(n_args, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
     
     mp_obj_t oin = args[0].u_obj;
     mp_obj_t axis = args[1].u_obj;
@@ -292,11 +284,12 @@ STATIC mp_obj_t numerical_function(size_t n_args, const mp_obj_t *pos_args, mp_m
             case NUMERICAL_SUM:
             case NUMERICAL_MEAN:
             case NUMERICAL_STD:
-                return numerical_sum_mean_std_array(oin, type);
+                return numerical_sum_mean_std_iterable(oin, type);
             default: // we should never reach this point, but whatever
                 return mp_const_none;
         }
     } else if(MP_OBJ_IS_TYPE(oin, &ulab_ndarray_type)) {
+        ndarray_obj_t *ndarray = MP_OBJ_TO_PTR(oin);
         switch(type) {
             case NUMERICAL_MIN:
             case NUMERICAL_MAX:
@@ -306,7 +299,8 @@ STATIC mp_obj_t numerical_function(size_t n_args, const mp_obj_t *pos_args, mp_m
             case NUMERICAL_SUM:
             case NUMERICAL_MEAN:
             case NUMERICAL_STD:
-                return numerical_sum_mean_std_matrix(oin, axis, type);            
+                return numerical_sum_mean_std_ndarray(ndarray, axis, type);
+//                return numerical_sum_mean_std_matrix(oin, axis, type);
             default:
                 mp_raise_NotImplementedError("operation is not implemented on ndarrays");
         }
