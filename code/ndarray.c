@@ -204,7 +204,7 @@ mp_obj_t ndarray_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw,
     mp_map_init_fixed_table(&kw_args, n_kw, args + n_args);
     uint8_t dtype = ndarray_init_helper(n_args, args, &kw_args);
 
-    size_t len1, len2=0, i=0;
+    size_t len1, len2 = 0, i = 0;
     mp_obj_t len_in = mp_obj_len_maybe(args[0]);
     if (len_in == MP_OBJ_NULL) {
         mp_raise_ValueError("first argument must be an iterable");
@@ -614,7 +614,7 @@ mp_obj_t ndarray_iternext(mp_obj_t self_in) {
     ndarray_obj_t *ndarray = MP_OBJ_TO_PTR(self->ndarray);
     // TODO: in numpy, ndarrays are iterated with respect to the first axis. 
     size_t iter_end = 0;
-    if((ndarray->m == 1)) {
+    if(ndarray->m == 1) {
         iter_end = ndarray->array->len;
     } else {
         iter_end = ndarray->m;
