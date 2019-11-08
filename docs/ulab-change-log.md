@@ -1,4 +1,10 @@
 
+Fri, 8 Nov 2019
+
+version 0.27
+
+    cleaned up the sum/mean/std functions in numerical.c, and changed the output of relational operators
+    
 Tue, 6 Nov 2019
 
 version 0.26

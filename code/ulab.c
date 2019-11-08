@@ -25,7 +25,7 @@
 #include "numerical.h"
 #include "test.h"
 
-#define ULAB_VERSION 0.26
+#define ULAB_VERSION 0.27
 
 typedef struct _mp_obj_float_t {
     mp_obj_base_t base;
