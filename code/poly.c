@@ -89,7 +89,7 @@ mp_obj_t poly_polyfit(size_t  n_args, const mp_obj_t *args) {
     if(!object_is_nditerable(args[0])) {
         mp_raise_ValueError("input data must be an iterable");
     }
-    uint16_t lenx, leny;
+    uint16_t lenx = 0, leny = 0;
     uint8_t deg;
     mp_float_t *x, *XT, *y, *prod;
 
@@ -108,7 +108,7 @@ mp_obj_t poly_polyfit(size_t  n_args, const mp_obj_t *args) {
         }
         y = m_new(mp_float_t, leny);
         fill_array_iterable(y, args[0]);
-    } else if(n_args == 3) {
+    } else { // n_args == 3 
         lenx = (uint16_t)mp_obj_get_int(mp_obj_len_maybe(args[0]));
         leny = (uint16_t)mp_obj_get_int(mp_obj_len_maybe(args[0]));
         if(lenx != leny) {
