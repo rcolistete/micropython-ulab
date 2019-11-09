@@ -23,7 +23,6 @@
 #include "poly.h"
 #include "fft.h"
 #include "numerical.h"
-#include "test.h"
 
 #define ULAB_VERSION 0.27
 
