@@ -33,8 +33,6 @@ typedef struct _mp_obj_float_t {
 
 mp_obj_float_t ulab_version = {{&mp_type_float}, ULAB_VERSION};
 
-MP_DEFINE_CONST_FUN_OBJ_1(test_iterator_obj, test_iterator);
-
 MP_DEFINE_CONST_FUN_OBJ_1(ndarray_shape_obj, ndarray_shape);
 MP_DEFINE_CONST_FUN_OBJ_1(ndarray_rawsize_obj, ndarray_rawsize);
 MP_DEFINE_CONST_FUN_OBJ_KW(ndarray_flatten_obj, 1, ndarray_flatten);
@@ -174,7 +172,6 @@ STATIC const mp_map_elem_t ulab_globals_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR_fft), (mp_obj_t)&fft_fft_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_ifft), (mp_obj_t)&fft_ifft_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_spectrum), (mp_obj_t)&fft_spectrum_obj },
-    { MP_OBJ_NEW_QSTR(MP_QSTR_test), (mp_obj_t)&test_iterator_obj },    
     // class constants
     { MP_ROM_QSTR(MP_QSTR_bool), MP_ROM_INT(NDARRAY_BOOL) },
     { MP_ROM_QSTR(MP_QSTR_uint8), MP_ROM_INT(NDARRAY_UINT8) },
