@@ -152,7 +152,7 @@ void ndarray_assign_row(mp_obj_array_t *data, mp_obj_t iterable, uint8_t typecod
         while ((item = mp_iternext(iterable)) != MP_OBJ_STOP_ITERATION) {
             mp_binary_set_val_array(typecode, data->items, (*idx)++, item);
         } 
-    } 
+    }
 }
 
 ndarray_obj_t *create_new_ndarray(size_t m, size_t n, uint8_t typecode) {
