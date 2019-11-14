@@ -132,7 +132,6 @@ mp_obj_t numerical_sum_mean_std_iterable(mp_obj_t oin, uint8_t optype, size_t dd
 STATIC mp_obj_t numerical_sum_mean_ndarray(ndarray_obj_t *ndarray, mp_obj_t axis, uint8_t optype) {
     size_t m, n, increment, start, start_inc, N, len; 
     axis_sorter(ndarray, axis, &m, &n, &N, &increment, &len, &start_inc);
-    printf("%ld, %ld\n", m, n);
     ndarray_obj_t *results = create_new_ndarray(m, n, NDARRAY_FLOAT);
     mp_float_t sum, sq_sum;
     mp_float_t *farray = (mp_float_t *)results->array->items;
