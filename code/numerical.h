@@ -13,122 +13,51 @@
 
 #include "ndarray.h"
 
-mp_obj_t numerical_linspace(size_t , const mp_obj_t *, mp_map_t *);
 mp_obj_t numerical_sum(size_t , const mp_obj_t *, mp_map_t *);
 mp_obj_t numerical_mean(size_t , const mp_obj_t *, mp_map_t *);
 mp_obj_t numerical_std(size_t , const mp_obj_t *, mp_map_t *);
-mp_obj_t numerical_min(size_t , const mp_obj_t *, mp_map_t *);
-mp_obj_t numerical_max(size_t , const mp_obj_t *, mp_map_t *);
-mp_obj_t numerical_argmin(size_t , const mp_obj_t *, mp_map_t *);
-mp_obj_t numerical_argmax(size_t , const mp_obj_t *, mp_map_t *);
-mp_obj_t numerical_roll(size_t , const mp_obj_t *, mp_map_t *);
 
-// TODO: implement minimum/maximum, and cumsum
-mp_obj_t numerical_minimum(mp_obj_t , mp_obj_t );
-mp_obj_t numerical_maximum(mp_obj_t , mp_obj_t );
-mp_obj_t numerical_cumsum(size_t , const mp_obj_t *, mp_map_t *);
-mp_obj_t numerical_flip(size_t , const mp_obj_t *, mp_map_t *);
-mp_obj_t numerical_diff(size_t , const mp_obj_t *, mp_map_t *);
-mp_obj_t numerical_sort(size_t , const mp_obj_t *, mp_map_t *);
-mp_obj_t numerical_sort_inplace(size_t , const mp_obj_t *, mp_map_t *);
-mp_obj_t numerical_argsort(size_t , const mp_obj_t *, mp_map_t *);
-
-// this macro could be tighter, if we moved the ifs to the argmin function, assigned <, as well as >
-#define ARG_MIN_LOOP(in, type, start, stop, stride, op) do {\
-    type *array = (type *)(in)->array->items;\
-    if(((op) == NUMERICAL_MAX) || ((op) == NUMERICAL_ARGMAX)) {\
-        for(size_t i=(start)+(stride); i < (stop); i+=(stride)) {\
-            if((array)[i] > (array)[best_idx]) {\
-                best_idx = i;\
-            }\
-        }\
-    } else{\
-        for(size_t i=(start)+(stride); i < (stop); i+=(stride)) {\
-            if((array)[i] < (array)[best_idx]) best_idx = i;\
-        }\
-    }\
-} while(0)
-
-#define CALCULATE_DIFF(in, out, type, M, N, inn, increment) do {\
-    type *source = (type *)(in)->array->items;\
-    type *target = (type *)(out)->array->items;\
-    for(size_t i=0; i < (M); i++) {\
-        for(size_t j=0; j < (N); j++) {\
-            for(uint8_t k=0; k < n+1; k++) {\
-                target[i*(N)+j] -= stencil[k]*source[i*(inn)+j+k*(increment)];\
-            }\
-        }\
-    }\
-} while(0)
-
-#define HEAPSORT(type, ndarray) do {\
+#define CALCULATE_SUM(ndarray, type, farray, shape_ax, index, stride, offset, optype) do {\
     type *array = (type *)(ndarray)->array->items;\
-    type tmp;\
-    for (;;) {\
-        if (k > 0) {\
-            tmp = array[start+(--k)*increment];\
-        } else {\
-            q--;\
-            if(q == 0) {\
-                break;\
-            }\
-            tmp = array[start+q*increment];\
-            array[start+q*increment] = array[start];\
-        }\
-        p = k;\
-        c = k + k + 1;\
-        while (c < q) {\
-            if((c + 1 < q)  &&  (array[start+(c+1)*increment] > array[start+c*increment])) {\
-                c++;\
-            }\
-            if(array[start+c*increment] > tmp) {\
-                array[start+p*increment] = array[start+c*increment];\
-                p = c;\
-                c = p + p + 1;\
-            } else {\
-                break;\
-            }\
-        }\
-        array[start+p*increment] = tmp;\
+    (farray)[(index)] = 0.0;\
+    for(size_t j=0; j < (shape_ax); j++, (offset) += (stride)) {\
+        (farray)[(index)] += array[(offset)];\
     }\
 } while(0)
 
-// This is pretty similar to HEAPSORT above; perhaps, the two could be combined somehow
-// On the other hand, since this is a macro, it doesn't really matter
-// Keep in mind that initially, index_array[start+s*increment] = s
-#define HEAP_ARGSORT(type, ndarray, index_array) do {\
+// TODO: this can be done without the NDARRAY_INDEX_FROM_FLAT macro
+// Welford algorithm for the standard deviation
+#define CALCULATE_FLAT_SUM_STD(ndarray, type, value, shape_strides, len, optype) do {\
     type *array = (type *)(ndarray)->array->items;\
-    type tmp;\
-    uint16_t itmp;\
-    for (;;) {\
-        if (k > 0) {\
-            k--;\
-            tmp = array[start+index_array[start+k*increment]*increment];\
-            itmp = index_array[start+k*increment];\
+    (value) = 0.0;\
+    mp_float_t m = 0.0, mtmp;\
+    size_t index, nindex;\
+    for(size_t j=0; j < (len); j++) {\
+        NDARRAY_INDEX_FROM_FLAT((ndarray), (shape_strides), j, index, nindex);\
+        if((optype) == NUMERICAL_STD) {\
+            mtmp = m;\
+            m = mtmp + (array[nindex] - mtmp) / (j+1);\
+            (value) += (array[nindex] - mtmp) * (array[nindex] - m);\
         } else {\
-            q--;\
-            if(q == 0) {\
-                break;\
-            }\
-            tmp = array[start+index_array[start+q*increment]*increment];\
-            itmp = index_array[start+q*increment];\
-            index_array[start+q*increment] = index_array[start];\
+            (value) += array[nindex];\
         }\
-        p = k;\
-        c = k + k + 1;\
-        while (c < q) {\
-            if((c + 1 < q)  &&  (array[start+index_array[start+(c+1)*increment]*increment] > array[start+index_array[start+c*increment]*increment])) {\
-                c++;\
-            }\
-            if(array[start+index_array[start+c*increment]*increment] > tmp) {\
-                index_array[start+p*increment] = index_array[start+c*increment];\
-                p = c;\
-                c = p + p + 1;\
-            } else {\
-                break;\
-            }\
-        }\
-        index_array[start+p*increment] = itmp;\
+    }\
+} while(0)
+
+// we calculate the standard deviation in two passes, in order to avoid negative values through truncation errors
+// We could do in a single pass, if we resorted to the Welford algorithm above
+#define CALCULATE_STD(ndarray, type, sq_sum, shape_ax, stride, offset) do {\
+    type *array = (type *)(ndarray)->array->items;\
+    mp_float_t x, ave = 0.0;\
+    (sq_sum) = 0.0;\
+    size_t j, _offset = (offset);\
+    for(j=0; j < (shape_ax); j++, _offset += (stride)) {\
+        ave += array[_offset];\
+    }\
+    ave /= j;\
+    for(j=0; j < (shape_ax); j++, (offset) += (stride)) {\
+        x = array[(offset)] - ave;\
+        sq_sum += x * x;\
     }\
 } while(0)
 
