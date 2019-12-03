@@ -24,7 +24,7 @@
 mp_obj_t vectorise_generic_vector(mp_obj_t o_in, mp_float_t (*f)(mp_float_t)) {
     // Return a single value, if o_in is not iterable
     if(mp_obj_is_float(o_in) || mp_obj_is_integer(o_in)) {
-            return mp_obj_new_float(f(mp_obj_get_float(o_in)));
+        return mp_obj_new_float(f(mp_obj_get_float(o_in)));
     }
     mp_float_t x;
     if(MP_OBJ_IS_TYPE(o_in, &ulab_ndarray_type)) {
@@ -32,37 +32,22 @@ mp_obj_t vectorise_generic_vector(mp_obj_t o_in, mp_float_t (*f)(mp_float_t)) {
         ndarray_obj_t *ndarray;
         if(source->len == source->array->len) { // this is a dense array
             ndarray = ndarray_new_dense_ndarray(source->ndim, source->shape, NDARRAY_FLOAT);
-            mp_float_t *dataout = (mp_float_t *)ndarray->array->items;
+            mp_float_t *array = (mp_float_t *)ndarray->array->items;
             if(source->array->typecode == NDARRAY_UINT8) {
-                ITERATE_VECTOR(uint8_t, source, dataout);
+                ITERATE_VECTOR(uint8_t, source, array);
             } else if(source->array->typecode == NDARRAY_INT8) {
-                ITERATE_VECTOR(int8_t, source, dataout);
+                ITERATE_VECTOR(int8_t, source, array);
             } else if(source->array->typecode == NDARRAY_UINT16) {
-                ITERATE_VECTOR(uint16_t, source, dataout);
+                ITERATE_VECTOR(uint16_t, source, array);
             } else if(source->array->typecode == NDARRAY_INT16) {
-                ITERATE_VECTOR(int16_t, source, dataout);
+                ITERATE_VECTOR(int16_t, source, array);
             } else {
-                ITERATE_VECTOR(mp_float_t, source, dataout);
-            }
-        } else { // we have to calculate the positions in the vector, since the strides are not derived from the shapes
-            int32_t *shape_strides = m_new(int32_t, source->ndim);
-            shape_strides[source->ndim-1] = 1;
-            for(size_t i=source->ndim; i > 0; i--) {
-                shape_strides[i-i] = shape_strides[i] * source->shape[i-1];
-            }
-            ndarray = ndarray_new_ndarray(source->ndim, source->shape, shape_strides, NDARRAY_FLOAT);
+                ITERATE_VECTOR(mp_float_t, source, array);
+            } 
+        } else {
+            ndarray = ndarray_copy_view(source, NDARRAY_FLOAT);
             mp_float_t *dataout = (mp_float_t *)ndarray->array->items;
-            if(source->array->typecode == NDARRAY_UINT8) {
-                ITERATE_VECTOR_SLICE(uint8_t, source, dataout, source->strides, shape_strides);
-            } else if(source->array->typecode == NDARRAY_INT8) {
-                ITERATE_VECTOR_SLICE(int8_t, source, dataout, source->strides, shape_strides);
-            } else if(source->array->typecode == NDARRAY_UINT16) {
-                ITERATE_VECTOR_SLICE(uint16_t, source, dataout, source->strides, shape_strides);
-            } else if(source->array->typecode == NDARRAY_INT16) {
-                ITERATE_VECTOR_SLICE(int16_t, source, dataout, source->strides, shape_strides);
-            } else {
-                ITERATE_VECTOR_SLICE(float, source, dataout, source->strides, shape_strides);                
-            }
+            ITERATE_VECTOR(mp_float_t, ndarray, dataout);
         }
         return MP_OBJ_FROM_PTR(ndarray);
     } else if(MP_OBJ_IS_TYPE(o_in, &mp_type_tuple) || MP_OBJ_IS_TYPE(o_in, &mp_type_list) || 

@@ -71,6 +71,7 @@ void ndarray_iterative_print(const mp_print_t *print, ndarray_obj_t *ndarray, si
     size_t offset = ndarray->offset;
     uint8_t print_extra = ndarray->ndim;
     size_t *coords = m_new(size_t, ndarray->ndim);
+    for(uint8_t i=0; i < ndarray->ndim; i++) coords[i] = 0;
     for(size_t i=0; i < ndarray->len; i++) {
         for(uint8_t j=0; j < print_extra; j++) {
             printf("[");
@@ -162,7 +163,7 @@ ndarray_obj_t *ndarray_new_dense_ndarray(uint8_t ndim, size_t *shape, uint8_t ty
     int32_t *strides = m_new(int32_t, ndim);
     strides[ndim-1] = 1;
     for(size_t i=ndim-1; i > 0; i--) {
-        strides[i-1] = strides[i] * shape[i-1];
+        strides[i-1] = strides[i] * shape[i];
     }
     return ndarray_new_ndarray(ndim, shape, strides, typecode);
 }
@@ -180,6 +181,40 @@ ndarray_obj_t *ndarray_new_view(mp_obj_array_t *array, uint8_t ndim, size_t *sha
     }    
     ndarray->offset = offset;
     ndarray->array = array;
+    return ndarray;
+}
+
+ndarray_obj_t *ndarray_copy_view(ndarray_obj_t *input, uint8_t typecode) {
+    // Creates a new ndarray from the input
+    // If the input was a sliced view, the output will inherit the shape, but not the strides
+
+    int32_t *strides = m_new(int32_t, input->ndim);
+    strides[input->ndim-1] = 1;
+    for(uint8_t i=input->ndim-1; i > 0; i--) {
+        strides[i-1] = strides[i] * input->shape[i];
+    }
+    ndarray_obj_t *ndarray = ndarray_new_ndarray(input->ndim, input->shape, strides, typecode);
+    ndarray->boolean = input->boolean;
+    
+    mp_obj_t item;
+    size_t offset = input->offset;
+    size_t *coords = m_new(size_t, input->ndim);
+    for(uint8_t i=0; i < ndarray->ndim; i++) coords[i] = 0;
+    for(size_t i=0; i < ndarray->len; i++) {
+        item = mp_binary_get_val_array(input->array->typecode, input->array->items, offset);
+        mp_binary_set_val_array(typecode, ndarray->array->items, i, item);
+        offset += input->strides[input->ndim-1];
+        coords[input->ndim-1] += 1;
+        for(uint8_t j=ndarray->ndim-1; j > 0; j--) {
+            if(coords[j] == input->shape[j]) {
+                offset -= input->shape[j] * input->strides[j];
+                offset += input->strides[j-1];
+                coords[j] = 0;
+                coords[j-1] += 1;
+            }
+        }
+    }
+    m_del(size_t, coords, input->ndim);
     return ndarray;
 }
 

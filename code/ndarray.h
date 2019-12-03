@@ -92,6 +92,7 @@ void ndarray_print(const mp_print_t *, mp_obj_t , mp_print_kind_t );
 ndarray_obj_t *ndarray_new_ndarray(uint8_t , size_t *, int32_t *, uint8_t );
 ndarray_obj_t *ndarray_new_dense_ndarray(uint8_t , size_t *, uint8_t );
 ndarray_obj_t *ndarray_new_linear_array(size_t , uint8_t );
+ndarray_obj_t *ndarray_copy_view(ndarray_obj_t *, uint8_t );
 
 mp_obj_t ndarray_copy(mp_obj_t );
 mp_obj_t ndarray_make_new(const mp_obj_type_t *, size_t , size_t , const mp_obj_t *);

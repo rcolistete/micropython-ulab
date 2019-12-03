@@ -20,7 +20,7 @@
 #include "ndarray.h"
 #include "vectorise.h"
 #include "linalg.h"
-//#include "poly.h"
+#include "poly.h"
 #include "numerical.h"
 
 #define ULAB_VERSION 1.0
@@ -73,12 +73,12 @@ MP_DEFINE_CONST_FUN_OBJ_KW(linalg_eye_obj, 0, linalg_eye);
 MP_DEFINE_CONST_FUN_OBJ_1(linalg_det_obj, linalg_det);
 MP_DEFINE_CONST_FUN_OBJ_1(linalg_eig_obj, linalg_eig);
 
-//STATIC MP_DEFINE_CONST_FUN_OBJ_2(poly_polyval_obj, poly_polyval);
-//STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(poly_polyfit_obj, 2, 3, poly_polyfit);
+MP_DEFINE_CONST_FUN_OBJ_2(poly_polyval_obj, poly_polyval);
+MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(poly_polyfit_obj, 2, 3, poly_polyfit);
 
-STATIC MP_DEFINE_CONST_FUN_OBJ_KW(numerical_sum_obj, 1, numerical_sum);
-STATIC MP_DEFINE_CONST_FUN_OBJ_KW(numerical_mean_obj, 1, numerical_mean);
-STATIC MP_DEFINE_CONST_FUN_OBJ_KW(numerical_std_obj, 1, numerical_std);
+MP_DEFINE_CONST_FUN_OBJ_KW(numerical_sum_obj, 1, numerical_sum);
+MP_DEFINE_CONST_FUN_OBJ_KW(numerical_mean_obj, 1, numerical_mean);
+MP_DEFINE_CONST_FUN_OBJ_KW(numerical_std_obj, 1, numerical_std);
 
 STATIC const mp_rom_map_elem_t ulab_ndarray_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_shape), MP_ROM_PTR(&ndarray_shape_obj) },
@@ -131,8 +131,8 @@ STATIC const mp_map_elem_t ulab_globals_table[] = {
     { MP_OBJ_NEW_QSTR(MP_QSTR_sqrt), (mp_obj_t)&vectorise_sqrt_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_tan), (mp_obj_t)&vectorise_tan_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_tanh), (mp_obj_t)&vectorise_tanh_obj },
-//    { MP_OBJ_NEW_QSTR(MP_QSTR_polyval), (mp_obj_t)&poly_polyval_obj },
-//    { MP_OBJ_NEW_QSTR(MP_QSTR_polyfit), (mp_obj_t)&poly_polyfit_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_polyval), (mp_obj_t)&poly_polyval_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_polyfit), (mp_obj_t)&poly_polyfit_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_inv), (mp_obj_t)&linalg_inv_obj },
     { MP_ROM_QSTR(MP_QSTR_dot), (mp_obj_t)&linalg_dot_obj },
     { MP_ROM_QSTR(MP_QSTR_zeros), (mp_obj_t)&linalg_zeros_obj },

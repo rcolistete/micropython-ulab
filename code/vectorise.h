@@ -40,7 +40,7 @@ mp_obj_t vectorise_tanh(mp_obj_t );
 #define ITERATE_VECTOR(type, source, out) do {\
     type *input = (type *)(source)->array->items;\
     for(size_t i=0; i < (source)->array->len; i++) {\
-                (out)[i] = f(input[i]);\
+        (out)[i] = f(input[i]);\
     }\
 } while(0)
 

@@ -15,114 +15,73 @@
 #include "linalg.h"
 #include "poly.h"
 
-
-bool object_is_nditerable(mp_obj_t o_in) {
-    if(mp_obj_is_type(o_in, &ulab_ndarray_type) || 
-      mp_obj_is_type(o_in, &mp_type_tuple) || 
-      mp_obj_is_type(o_in, &mp_type_list) || 
-      mp_obj_is_type(o_in, &mp_type_range)) {
-        return true;
-    }
-    return false;
-}
-
-size_t get_nditerable_len(mp_obj_t o_in) {
-    if(mp_obj_is_type(o_in, &ulab_ndarray_type)) {
-        ndarray_obj_t *in = MP_OBJ_TO_PTR(o_in);
-        return in->array->len;
-    } else {
-        return (size_t)mp_obj_get_int(mp_obj_len_maybe(o_in));
+void fill_array_iterable(mp_float_t *array, mp_obj_t oin) {
+    mp_obj_iter_buf_t buf;
+    mp_obj_t item, iterable = mp_getiter(oin, &buf);
+    while((item = mp_iternext(iterable)) != MP_OBJ_STOP_ITERATION) {
+        *array++ = mp_obj_get_float(item);
     }
 }
 
 mp_obj_t poly_polyval(mp_obj_t o_p, mp_obj_t o_x) {
-    // TODO: return immediately, if o_p is not an iterable
-    // TODO: there is a bug here: matrices won't work, 
-    // because there is a single iteration loop
-    size_t m, n;
-    if(MP_OBJ_IS_TYPE(o_x, &ulab_ndarray_type)) {
-        ndarray_obj_t *ndx = MP_OBJ_TO_PTR(o_x);
-        m = ndx->m;
-        n = ndx->n;
-    } else {
-        mp_obj_array_t *ix = MP_OBJ_TO_PTR(o_x);
-        m = 1;
-        n = ix->len;
-    }
-    // polynomials are going to be of type float, except, when both 
-    // the coefficients and the independent variable are integers
-    ndarray_obj_t *out = create_new_ndarray(m, n, NDARRAY_FLOAT);
-    mp_obj_iter_buf_t x_buf;
-    mp_obj_t x_item, x_iterable = mp_getiter(o_x, &x_buf);
-
-    mp_obj_iter_buf_t p_buf;
-    mp_obj_t p_item, p_iterable;
-
-    mp_float_t x, y;
-    mp_float_t *outf = (mp_float_t *)out->array->items;
+    // we always return floats: polynomials are going to be of type float, except, 
+    // when both the coefficients and the independent variable are integers; 
     uint8_t plen = mp_obj_get_int(mp_obj_len_maybe(o_p));
     mp_float_t *p = m_new(mp_float_t, plen);
-    p_iterable = mp_getiter(o_p, &p_buf);
-    uint16_t i = 0;    
-    while((p_item = mp_iternext(p_iterable)) != MP_OBJ_STOP_ITERATION) {
-        p[i] = mp_obj_get_float(p_item);
-        i++;
+    fill_array_iterable(p, o_p);
+    ndarray_obj_t *ndarray;
+    mp_float_t *array;
+    if(MP_OBJ_IS_TYPE(o_x, &ulab_ndarray_type)) {
+        ndarray_obj_t *input = MP_OBJ_TO_PTR(o_x);
+        ndarray = ndarray_copy_view(input, NDARRAY_FLOAT);
+        array = (mp_float_t *)ndarray->array->items;
+    } else { // at this point, we should have a 1-D iterable
+        size_t len = mp_obj_get_int(mp_obj_len_maybe(o_x));
+        ndarray = ndarray_new_linear_array(len, NDARRAY_FLOAT);
+        array = (mp_float_t *)ndarray->array->items;
+        fill_array_iterable(array, o_x);
     }
-    i = 0;
-    while ((x_item = mp_iternext(x_iterable)) != MP_OBJ_STOP_ITERATION) {
-        x = mp_obj_get_float(x_item);
+    mp_float_t x, y;
+    for(size_t i=0; i < ndarray->len; i++) {
+        x = array[i];
         y = p[0];
         for(uint8_t j=0; j < plen-1; j++) {
             y *= x;
             y += p[j+1];
         }
-        outf[i++] = y;
+        array[i] = y;
     }
     m_del(mp_float_t, p, plen);
-    return MP_OBJ_FROM_PTR(out);
+    return MP_OBJ_FROM_PTR(ndarray);
 }
 
-mp_obj_t poly_polyfit(size_t  n_args, const mp_obj_t *args) {
-    if((n_args != 2) && (n_args != 3)) {
-        mp_raise_ValueError("number of arguments must be 2, or 3");
+mp_obj_t poly_polyfit(size_t n_args, const mp_obj_t *args) {
+    if(n_args != 3) {
+        mp_raise_ValueError("number of arguments must be 3");
     }
-    if(!object_is_nditerable(args[0])) {
-        mp_raise_ValueError("input data must be an iterable");
+    if(!MP_OBJ_IS_TYPE(args[0], &ulab_ndarray_type) && !MP_OBJ_IS_TYPE(args[0], &mp_type_tuple) &&
+      !MP_OBJ_IS_TYPE(args[0], &mp_type_list) && !MP_OBJ_IS_TYPE(args[0], &mp_type_range) &&
+      !MP_OBJ_IS_TYPE(args[1], &ulab_ndarray_type) && !MP_OBJ_IS_TYPE(args[1], &mp_type_tuple) &&
+      !MP_OBJ_IS_TYPE(args[1], &mp_type_list) && !MP_OBJ_IS_TYPE(args[1], &mp_type_range)) {
+        mp_raise_ValueError("input data must be a 1D iterable");
     }
-    uint16_t lenx = 0, leny = 0;
-    uint8_t deg = 0;
+    uint16_t lenx, leny;
+    uint8_t deg;
     mp_float_t *x, *XT, *y, *prod;
 
-    if(n_args == 2) { // only the y values are supplied
-        // TODO: this is actually not enough: the first argument can very well be a matrix, 
-        // in which case we are between the rock and a hard place
-        leny = (uint16_t)mp_obj_get_int(mp_obj_len_maybe(args[0]));
-        deg = (uint8_t)mp_obj_get_int(args[1]);
-        if(leny < deg) {
-            mp_raise_ValueError("more degrees of freedom than data points");
-        }
-        lenx = leny;
-        x = m_new(mp_float_t, lenx); // assume uniformly spaced data points
-        for(size_t i=0; i < lenx; i++) {
-            x[i] = i;
-        }
-        y = m_new(mp_float_t, leny);
-        fill_array_iterable(y, args[0]);
-    } else if(n_args == 3) {
-        lenx = (uint16_t)mp_obj_get_int(mp_obj_len_maybe(args[0]));
-        leny = (uint16_t)mp_obj_get_int(mp_obj_len_maybe(args[0]));
-        if(lenx != leny) {
-            mp_raise_ValueError("input vectors must be of equal length");
-        }
-        deg = (uint8_t)mp_obj_get_int(args[2]);
-        if(leny < deg) {
-            mp_raise_ValueError("more degrees of freedom than data points");
-        }
-        x = m_new(mp_float_t, lenx);
-        fill_array_iterable(x, args[0]);
-        y = m_new(mp_float_t, leny);
-        fill_array_iterable(y, args[1]);
+    lenx = (uint16_t)mp_obj_get_int(mp_obj_len_maybe(args[0]));
+    leny = (uint16_t)mp_obj_get_int(mp_obj_len_maybe(args[1]));
+    if(lenx != leny) {
+        mp_raise_ValueError("input vectors must be of equal length");
     }
+    deg = (uint8_t)mp_obj_get_int(args[2]);
+    if(leny < deg) {
+        mp_raise_ValueError("more degrees of freedom than data points");
+    }
+    x = m_new(mp_float_t, lenx);
+    fill_array_iterable(x, args[0]);
+    y = m_new(mp_float_t, leny);
+    fill_array_iterable(y, args[1]);
     
     // one could probably express X as a function of XT, 
     // and thereby save RAM, because X is used only in the product
@@ -170,7 +129,7 @@ mp_obj_t poly_polyfit(size_t  n_args, const mp_obj_t *args) {
     // XT is no longer needed
     m_del(mp_float_t, XT, (deg+1)*leny);
     
-    ndarray_obj_t *beta = create_new_ndarray(deg+1, 1, NDARRAY_FLOAT);
+    ndarray_obj_t *beta = ndarray_new_linear_array(deg+1, NDARRAY_FLOAT);
     mp_float_t *betav = (mp_float_t *)beta->array->items;
     // x[0..(deg+1)] contains now the product X^T * y; we can get rid of y
     m_del(float, y, leny);
