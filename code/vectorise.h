@@ -40,16 +40,7 @@ mp_obj_t vectorise_tanh(mp_obj_t );
 #define ITERATE_VECTOR(type, source, out) do {\
     type *input = (type *)(source)->array->items;\
     for(size_t i=0; i < (source)->array->len; i++) {\
-        (out)[i] = f(input[i]);\
-    }\
-} while(0)
-
-#define ITERATE_VECTOR_SLICE(type, source, out, strides_array, shape_strides) do{\
-    size_t tindex, nindex;\
-    type *input = (type *)(source)->array->items;\
-    for(size_t i=0; i < (source)->len; i++) {\
-        NDARRAY_INDEX_FROM_FLAT2((source), (strides_array), (shape_strides), i, tindex, nindex);\
-        (out)[i] = f(input[nindex]);\
+        *(out)++ = f(*input++);\
     }\
 } while(0)
 
