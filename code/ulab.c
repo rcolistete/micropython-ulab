@@ -76,6 +76,7 @@ MP_DEFINE_CONST_FUN_OBJ_1(linalg_eig_obj, linalg_eig);
 MP_DEFINE_CONST_FUN_OBJ_2(poly_polyval_obj, poly_polyval);
 MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(poly_polyfit_obj, 2, 3, poly_polyfit);
 
+MP_DEFINE_CONST_FUN_OBJ_KW(numerical_linspace_obj, 2, numerical_linspace);
 MP_DEFINE_CONST_FUN_OBJ_KW(numerical_sum_obj, 1, numerical_sum);
 MP_DEFINE_CONST_FUN_OBJ_KW(numerical_mean_obj, 1, numerical_mean);
 MP_DEFINE_CONST_FUN_OBJ_KW(numerical_std_obj, 1, numerical_std);
@@ -145,6 +146,7 @@ STATIC const mp_map_elem_t ulab_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_eye), (mp_obj_t)&linalg_eye_obj },
     { MP_ROM_QSTR(MP_QSTR_det), (mp_obj_t)&linalg_det_obj },
     { MP_ROM_QSTR(MP_QSTR_eig), (mp_obj_t)&linalg_eig_obj },
+    { MP_OBJ_NEW_QSTR(MP_QSTR_linspace), (mp_obj_t)&numerical_linspace_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_sum), (mp_obj_t)&numerical_sum_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_mean), (mp_obj_t)&numerical_mean_obj },
     { MP_OBJ_NEW_QSTR(MP_QSTR_std), (mp_obj_t)&numerical_std_obj },
