@@ -67,56 +67,55 @@ size_t ndarray_index_from_contracted(size_t index, ndarray_obj_t *ndarray, int32
     return new_index + ndarray->offset;
 }
 
-void ndarray_iterative_print(const mp_print_t *print, ndarray_obj_t *ndarray, size_t *shape, int32_t *strides) {
-    size_t offset = ndarray->offset;
-    uint8_t print_extra = ndarray->ndim;
-    size_t *coords = m_new(size_t, ndarray->ndim);
-    for(uint8_t i=0; i < ndarray->ndim; i++) coords[i] = 0;
-    for(size_t i=0; i < ndarray->len; i++) {
+void ndarray_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t kind) {
+    (void)kind;
+    ndarray_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    size_t offset = self->offset;
+    uint8_t print_extra = self->ndim;
+    size_t *coords = m_new(size_t, self->ndim);    
+    memset(coords, 0, self->ndim*sizeof(size_t));
+    
+    mp_print_str(print, "array(");
+        
+    for(size_t i=0; i < self->len; i++) {
         for(uint8_t j=0; j < print_extra; j++) {
-            printf("[");
+            mp_print_str(print, "[");
         }
         print_extra = 0;
-        if(!ndarray->boolean) {
-            mp_obj_print_helper(print, mp_binary_get_val_array(ndarray->array->typecode, ndarray->array->items, offset), PRINT_REPR);
+        if(!self->boolean) {
+            mp_obj_print_helper(print, mp_binary_get_val_array(self->array->typecode, self->array->items, offset), PRINT_REPR);
         } else {
-            if(((uint8_t *)ndarray->array->items)[offset]) {
+            if(((uint8_t *)self->array->items)[offset]) {
                 mp_print_str(print, "True");
             } else {                    
                 mp_print_str(print, "False");
             }
         }
-        offset += ndarray->strides[ndarray->ndim-1];
-        coords[ndarray->ndim-1] += 1;
-        if(coords[ndarray->ndim-1] != ndarray->shape[ndarray->ndim-1]) {
+        offset += self->strides[self->ndim-1];
+        coords[self->ndim-1] += 1;
+        if(coords[self->ndim-1] != self->shape[self->ndim-1]) {
             mp_print_str(print, ", ");
         }
-        for(uint8_t j=ndarray->ndim-1; j > 0; j--) {
-            if(coords[j] == ndarray->shape[j]) {
-                offset -= ndarray->shape[j]*ndarray->strides[j];
-                offset += ndarray->strides[j-1];
+        for(uint8_t j=self->ndim-1; j > 0; j--) {
+            if(coords[j] == self->shape[j]) {
+                offset -= self->shape[j] * self->strides[j];
+                offset += self->strides[j-1];
                 print_extra += 1;
                 coords[j] = 0;
                 coords[j-1] += 1;
-                printf("]");
+                mp_print_str(print, "]");
             }
         }
-        if(print_extra && (i != ndarray->len-1)) {
-            printf(",\n");
+        if(print_extra && (i != self->len-1)) {
+            mp_print_str(print, ",\n");
             if(print_extra > 1) {
-                printf("\n");
+                mp_print_str(print, "\n");
             }
         }
     }
-    printf("]");
-    m_del(size_t, coords, ndarray->ndim);
-}
+    mp_print_str(print, "]");
+    m_del(size_t, coords, self->ndim);
 
-void ndarray_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t kind) {
-    (void)kind;
-    ndarray_obj_t *self = MP_OBJ_TO_PTR(self_in);
-    mp_print_str(print, "array(");
-    ndarray_iterative_print(print, self, self->shape, self->strides);
     if(self->boolean) {
         mp_print_str(print, ", dtype=bool)");
     } else if(self->array->typecode == NDARRAY_UINT8) {
@@ -199,7 +198,8 @@ ndarray_obj_t *ndarray_copy_view(ndarray_obj_t *input, uint8_t typecode) {
     mp_obj_t item;
     size_t offset = input->offset;
     size_t *coords = m_new(size_t, input->ndim);
-    for(uint8_t i=0; i < ndarray->ndim; i++) coords[i] = 0;
+    memset(coords, 0, ndarray->ndim*sizeof(size_t));
+    
     for(size_t i=0; i < ndarray->len; i++) {
         item = mp_binary_get_val_array(input->array->typecode, input->array->items, offset);
         mp_binary_set_val_array(typecode, ndarray->array->items, i, item);
@@ -303,6 +303,8 @@ mp_obj_t ndarray_new_view_from_tuple(ndarray_obj_t *ndarray, mp_obj_tuple_t *sli
     for(uint8_t i=0; i < ndarray->ndim; i++) {
         if(i < slices->len) {
             slice = generate_slice(ndarray->shape[i], slices->items[i]);
+                        printf("%ld\n", slice_length(slice));
+
             offset += ndarray->offset + slice.start * ndarray->strides[i];
             shape_array[i] = slice_length(slice);
             strides_array[i] = ndarray->strides[i] * slice.step;
@@ -514,40 +516,59 @@ mp_obj_t ndarray_flatten(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_a
     ndarray_obj_t *ndarray = MP_OBJ_TO_PTR(pos_args[0]);
     
     GET_STR_DATA_LEN(args[0].u_obj, order, clen);
-    size_t len = 1;
+/*    size_t len = 1;
     for(uint8_t i=0; i < ndarray->ndim; i++) {
         len *= ndarray->shape[i];
-    }
+    }*/
     if((clen != 1) || ((memcmp(order, "C", 1) != 0) && (memcmp(order, "F", 1) != 0))) {
         mp_raise_ValueError("flattening order must be either 'C', or 'F'");        
     }
-    ndarray_obj_t *result = ndarray_new_linear_array(len, ndarray->array->typecode);
-    size_t bytes = len * mp_binary_get_size('@', ndarray->array->typecode, NULL);
-    if(len == ndarray->array->len) { // this is a dense array, we can simply copy everything
+    ndarray_obj_t *result = ndarray_new_linear_array(ndarray->len, ndarray->array->typecode);
+    uint8_t itemsize = mp_binary_get_size('@', ndarray->array->typecode, NULL);
+    if(ndarray->len == ndarray->array->len) { // this is a dense array, we can simply copy everything
         if(memcmp(order, "C", 1) == 0) { // C order; this should be fast, because no re-ordering is required
-            memcpy(result->array->items, ndarray->array->items, bytes);
+            memcpy(result->array->items, ndarray->array->items, itemsize*ndarray->len);
         } else { // Fortran order
             mp_raise_NotImplementedError("flatten is implemented in C order only");
         }
         return MP_OBJ_FROM_PTR(result);
     } else {
-        uint8_t itemsize = mp_binary_get_size('@', ndarray->array->typecode, NULL);
-        size_t nindex, tindex;
-        int32_t *shape_strides = m_new(int32_t, 1);
-        shape_strides[0] = 1;
+//        size_t nindex, tindex;
+//        int32_t *shape_strides = m_new(int32_t, 1);
+  //      shape_strides[0] = 1;
         uint8_t *rarray = (uint8_t *)result->array->items;
         uint8_t *narray = (uint8_t *)ndarray->array->items;
+        size_t *coords = m_new(size_t, ndarray->ndim);
+        memset(coords, 0, ndarray->ndim*sizeof(size_t));
+
+        size_t offset = ndarray->offset;
         if(memcmp(order, "C", 1) == 0) { // C order; this is a view, so we have to collect the items
+            for(size_t i=0; i < result->len; i++) {
+                memcpy(rarray, &narray[offset*itemsize], itemsize);
+                rarray += itemsize;
+                offset += ndarray->strides[ndarray->ndim-1];
+                coords[ndarray->ndim-1] += 1;
+                for(uint8_t j=ndarray->ndim-1; j > 0; j--) {
+                    if(coords[j] == ndarray->shape[j]) {
+                        offset -= ndarray->shape[j] * ndarray->strides[j];
+                        offset += ndarray->strides[j-1];
+                        coords[j] = 0;
+                        coords[j-1] += 1;
+                    }
+                }
+            }
+            /*                        
             for(size_t i=0; i < len; i++) {
                 // TODO: get rid of the macro
                 NDARRAY_INDEX_FROM_FLAT(ndarray, shape_strides, i, tindex, nindex);
                 memcpy(rarray, &narray[nindex*itemsize], itemsize);
                 rarray += i*itemsize;
-            }
+            } */
+            m_del(size_t, coords, ndarray->ndim);
         } else { // Fortran order
-            mp_raise_NotImplementedError("flatten is implemented in C order only");
+            mp_raise_NotImplementedError("flatten is implemented for C order only");
         }
-        m_del(int32_t, shape_strides, 1);
+        //m_del(int32_t, shape_strides, 1);
         return MP_OBJ_FROM_PTR(result);
     }
 }
