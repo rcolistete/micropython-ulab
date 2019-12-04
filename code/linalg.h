@@ -21,7 +21,6 @@
 
 #define JACOBI_MAX     20
 
-mp_obj_t linalg_transpose(mp_obj_t );
 bool linalg_invert_matrix(mp_float_t *, size_t );
 mp_obj_t linalg_inv(mp_obj_t );
 mp_obj_t linalg_dot(mp_obj_t , mp_obj_t );
