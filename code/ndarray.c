@@ -87,7 +87,7 @@ void ndarray_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t ki
         } else {
             if(((uint8_t *)self->array->items)[offset]) {
                 mp_print_str(print, "True");
-            } else {                    
+            } else {
                 mp_print_str(print, "False");
             }
         }
@@ -104,6 +104,8 @@ void ndarray_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t ki
                 coords[j] = 0;
                 coords[j-1] += 1;
                 mp_print_str(print, "]");
+            } else { // coordinates can change only, if the last coordinate changes
+                break;
             }
         }
         if(print_extra && (i != self->len-1)) {
@@ -211,11 +213,21 @@ ndarray_obj_t *ndarray_copy_view(ndarray_obj_t *input, uint8_t typecode) {
                 offset += input->strides[j-1];
                 coords[j] = 0;
                 coords[j-1] += 1;
+            } else { // coordinates can change only, if the last coordinate changes
+                break;
             }
         }
     }
     m_del(size_t, coords, input->ndim);
     return ndarray;
+}
+
+ndarray_obj_t *ndarray_new_linear_array(size_t len, uint8_t dtype) {
+    size_t *shape = m_new(size_t, 1);
+    int32_t *strides = m_new(int32_t, 1);
+    shape[0] = len;
+    strides[0] = 1;
+    return ndarray_new_ndarray(1, shape, strides, dtype);
 }
 
 STATIC uint8_t ndarray_init_helper(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
@@ -232,14 +244,6 @@ STATIC uint8_t ndarray_init_helper(size_t n_args, const mp_obj_t *pos_args, mp_m
     return dtype;
 }
 
-ndarray_obj_t *ndarray_new_linear_array(size_t len, uint8_t dtype) {
-    size_t *shape = m_new(size_t, 1);
-    int32_t *strides = m_new(int32_t, 1);
-    shape[0] = len;
-    strides[0] = 1;
-    return ndarray_new_ndarray(1, shape, strides, dtype);
-}
-
 mp_obj_t ndarray_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *args) {
     // TODO: implement dtype, and copy keywords
     mp_arg_check_num(n_args, n_kw, 1, 2, true);
@@ -253,11 +257,21 @@ mp_obj_t ndarray_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw,
     // work with a single dimension for now
     ndarray_obj_t *self = ndarray_new_linear_array(len, dtype);
     
-    size_t i = 0;
+    size_t i=0;
     mp_obj_iter_buf_t iter_buf;
     mp_obj_t item, iterable = mp_getiter(args[0], &iter_buf);
-    while ((item = mp_iternext(iterable)) != MP_OBJ_STOP_ITERATION) {
-        mp_binary_set_val_array(dtype, self->array->items, i++, item);
+    if(self->boolean) {
+        uint8_t *array = (uint8_t *)self->array->items;
+        while ((item = mp_iternext(iterable)) != MP_OBJ_STOP_ITERATION) {
+            if(mp_obj_get_float(item)) {
+                *array = 1;
+            }
+            array++;
+        }
+    } else {
+        while ((item = mp_iternext(iterable)) != MP_OBJ_STOP_ITERATION) {
+            mp_binary_set_val_array(dtype, self->array->items, i++, item);
+        }
     }
     return MP_OBJ_FROM_PTR(self);
 }
@@ -284,14 +298,30 @@ mp_bound_slice_t generate_slice(mp_uint_t n, mp_obj_t index) {
     return slice;
 }
 
-// TODO: turn this into a macro!
+// TODO: I am pretty sure there is a more elegant way of calculating the slice length...
 size_t slice_length(mp_bound_slice_t slice) {
-    // TODO: check, whether this is correct!
-    if(slice.step < 0) {
-        slice.step = -slice.step;
-        return (slice.start - slice.stop) / slice.step;
+    if(slice.step == 1) {
+        if(slice.start < slice.stop) return slice.stop - slice.start;
+        else return 0;
+    } else if(slice.step == -1) {
+        if(slice.start > slice.stop) return slice.start - slice.stop;
+        else return 0;
     } else {
-        return (slice.stop - slice.start) / slice.step;        
+        if(slice.step < 0) {
+            if(slice.start < slice.stop) {
+                return 0;
+            }
+            else {
+                slice.step = -slice.step;
+                return (slice.start - slice.stop + 1) / slice.step;
+            }
+        } else {
+            if(slice.start < slice.stop) {
+                return (slice.stop - slice.start + 1) / slice.step;
+            } else {
+                return 0;
+            }
+        }
     }
 }
 
@@ -303,8 +333,6 @@ mp_obj_t ndarray_new_view_from_tuple(ndarray_obj_t *ndarray, mp_obj_tuple_t *sli
     for(uint8_t i=0; i < ndarray->ndim; i++) {
         if(i < slices->len) {
             slice = generate_slice(ndarray->shape[i], slices->items[i]);
-                        printf("%ld\n", slice_length(slice));
-
             offset += ndarray->offset + slice.start * ndarray->strides[i];
             shape_array[i] = slice_length(slice);
             strides_array[i] = ndarray->strides[i] * slice.step;
@@ -533,9 +561,6 @@ mp_obj_t ndarray_flatten(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_a
         }
         return MP_OBJ_FROM_PTR(result);
     } else {
-//        size_t nindex, tindex;
-//        int32_t *shape_strides = m_new(int32_t, 1);
-  //      shape_strides[0] = 1;
         uint8_t *rarray = (uint8_t *)result->array->items;
         uint8_t *narray = (uint8_t *)ndarray->array->items;
         size_t *coords = m_new(size_t, ndarray->ndim);
@@ -554,16 +579,11 @@ mp_obj_t ndarray_flatten(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_a
                         offset += ndarray->strides[j-1];
                         coords[j] = 0;
                         coords[j-1] += 1;
+                    } else { // coordinates can change only, if the last coordinate changes
+                        break;
                     }
                 }
             }
-            /*                        
-            for(size_t i=0; i < len; i++) {
-                // TODO: get rid of the macro
-                NDARRAY_INDEX_FROM_FLAT(ndarray, shape_strides, i, tindex, nindex);
-                memcpy(rarray, &narray[nindex*itemsize], itemsize);
-                rarray += i*itemsize;
-            } */
             m_del(size_t, coords, ndarray->ndim);
         } else { // Fortran order
             mp_raise_NotImplementedError("flatten is implemented for C order only");
@@ -619,11 +639,80 @@ mp_obj_t ndarray_binary_op(mp_binary_op_t op, mp_obj_t lhs, mp_obj_t rhs) {
 
 mp_obj_t ndarray_unary_op(mp_unary_op_t op, mp_obj_t self_in) {
     ndarray_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    ndarray_obj_t *ndarray;
+
     switch(op) {
         case MP_UNARY_OP_LEN:
-            return mp_obj_new_int(self->array->len);
+            return mp_obj_new_int(self->shape[0]);
+            break;
+
+        case MP_UNARY_OP_INVERT:
+            if(self->array->typecode == NDARRAY_FLOAT) {
+                mp_raise_ValueError("operation is not supported for given type");
+            }
+            // we can invert the content byte by byte, there is no need to distinguish between different typecodes
+            ndarray = ndarray_copy_view(self, self->array->typecode);
+            uint8_t *array = (uint8_t *)ndarray->array->items;
+            if(self->boolean == NDARRAY_BOOLEAN) {
+                for(size_t i=0; i < self->len; i++) array[i] = 1 - array[i];
+            }
+            else {
+                for(size_t i=0; i < self->len; i++) array[i] = ~array[i];
+            }
+            return MP_OBJ_FROM_PTR(ndarray);
             break;
         
+        case MP_UNARY_OP_NEGATIVE:
+            if(self->boolean == NDARRAY_BOOLEAN) {
+                mp_raise_TypeError("boolean negative '-' is not supported, use the '~' operator instead");
+            }
+            ndarray = ndarray_copy_view(self, self->array->typecode);
+            if(self->array->typecode == NDARRAY_UINT8) {
+                uint8_t *array = (uint8_t *)ndarray->array->items;
+                for(size_t i=0; i < self->len; i++) array[i] = -array[i];
+            } else if(self->array->typecode == NDARRAY_INT8) {
+                int8_t *array = (int8_t *)ndarray->array->items;
+                for(size_t i=0; i < self->len; i++) array[i] = -array[i];
+            } else if(self->array->typecode == NDARRAY_UINT16) {
+                uint16_t *array = (uint16_t *)ndarray->array->items;
+                for(size_t i=0; i < self->len; i++) array[i] = -array[i];
+            } else if(self->array->typecode == NDARRAY_INT16) {
+                int16_t *array = (int16_t *)ndarray->array->items;
+                for(size_t i=0; i < self->len; i++) array[i] = -array[i];
+            } else {
+                mp_float_t *array = (mp_float_t *)ndarray->array->items;
+                for(size_t i=0; i < self->len; i++) array[i] = -array[i];
+            }
+            return MP_OBJ_FROM_PTR(ndarray);
+            break;
+
+        case MP_UNARY_OP_POSITIVE:
+            return MP_OBJ_FROM_PTR(ndarray_copy_view(self, self->array->typecode));
+
+        case MP_UNARY_OP_ABS:
+            if((self->array->typecode == NDARRAY_UINT8) || (self->array->typecode == NDARRAY_UINT16)) {
+                return MP_OBJ_FROM_PTR(ndarray_copy_view(self, self->array->typecode));
+            }
+            ndarray = ndarray_copy_view(self, self->array->typecode);
+            if(self->array->typecode == NDARRAY_INT8) {
+                int8_t *array = (int8_t *)ndarray->array->items;
+                for(size_t i=0; i < self->len; i++) {
+                    if(array[i] < 0) array[i] = -array[i];
+                }
+            } else if(self->array->typecode == NDARRAY_INT16) {
+                int16_t *array = (int16_t *)ndarray->array->items;
+                for(size_t i=0; i < self->len; i++) {
+                    if(array[i] < 0) array[i] = -array[i];
+                }
+            } else {
+                mp_float_t *array = (mp_float_t *)ndarray->array->items;
+                for(size_t i=0; i < self->array->len; i++) {
+                    if(array[i] < 0) array[i] = -array[i];
+                }
+            }
+            return MP_OBJ_FROM_PTR(ndarray);
+        break;
+
         default: return MP_OBJ_NULL; // operator not supported
     }
 }

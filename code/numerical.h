@@ -29,12 +29,12 @@ mp_obj_t numerical_std(size_t , const mp_obj_t *, mp_map_t *);
 
 // TODO: this can be done without the NDARRAY_INDEX_FROM_FLAT macro
 // Welford algorithm for the standard deviation
-#define CALCULATE_FLAT_SUM_STD(ndarray, type, value, shape_strides, len, optype) do {\
+#define CALCULATE_FLAT_SUM_STD(ndarray, type, value, shape_strides, optype) do {\
     type *array = (type *)(ndarray)->array->items;\
     (value) = 0.0;\
     mp_float_t m = 0.0, mtmp;\
     size_t index, nindex;\
-    for(size_t j=0; j < (len); j++) {\
+    for(size_t j=0; j < (ndarray)->len; j++) {\
         NDARRAY_INDEX_FROM_FLAT((ndarray), (shape_strides), j, index, nindex);\
         if((optype) == NUMERICAL_STD) {\
             mtmp = m;\

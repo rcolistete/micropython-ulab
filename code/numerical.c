@@ -105,33 +105,29 @@ mp_obj_t numerical_linspace(size_t n_args, const mp_obj_t *pos_args, mp_map_t *k
 
 mp_obj_t numerical_flat_sum_mean_std(ndarray_obj_t *ndarray, uint8_t optype, size_t ddof) {
     mp_float_t value;
-    size_t len = 1;
-    for(uint8_t i=0; i < ndarray->ndim; i++) {
-        len *= ndarray->shape[i];
-    }
     int32_t *shape_strides = m_new(int32_t, ndarray->ndim);
     shape_strides[ndarray->ndim-1] = ndarray->strides[ndarray->ndim-1];
     for(uint8_t i=ndarray->ndim-1; i > 0; i--) {
         shape_strides[i-1] = shape_strides[i] * ndarray->shape[i-1];
     }
     if(ndarray->array->typecode == NDARRAY_UINT8) {
-        CALCULATE_FLAT_SUM_STD(ndarray, uint8_t, value, shape_strides, len, optype);
+        CALCULATE_FLAT_SUM_STD(ndarray, uint8_t, value, shape_strides, optype);
     } else if(ndarray->array->typecode == NDARRAY_INT8) {
-        CALCULATE_FLAT_SUM_STD(ndarray, int8_t, value, shape_strides, len, optype);        
+        CALCULATE_FLAT_SUM_STD(ndarray, int8_t, value, shape_strides, optype);
     } if(ndarray->array->typecode == NDARRAY_UINT16) {
-        CALCULATE_FLAT_SUM_STD(ndarray, uint16_t, value, shape_strides, len, optype);
+        CALCULATE_FLAT_SUM_STD(ndarray, uint16_t, value, shape_strides, optype);
     } else if(ndarray->array->typecode == NDARRAY_INT16) {
-        CALCULATE_FLAT_SUM_STD(ndarray, int16_t, value, shape_strides, len, optype);
+        CALCULATE_FLAT_SUM_STD(ndarray, int16_t, value, shape_strides, optype);
     } else {
-        CALCULATE_FLAT_SUM_STD(ndarray, mp_float_t, value, shape_strides, len, optype);
+        CALCULATE_FLAT_SUM_STD(ndarray, mp_float_t, value, shape_strides, optype);
     }
     m_del(int32_t, shape_strides, ndarray->ndim);
     if(optype == NUMERICAL_SUM) {
         return mp_obj_new_float(value);
     } else if(optype == NUMERICAL_MEAN) {
-        return mp_obj_new_float(value/len);        
+        return mp_obj_new_float(value/ndarray->len);
     } else {
-        return mp_obj_new_float(MICROPY_FLOAT_C_FUN(sqrt)(value/(len-ddof)));
+        return mp_obj_new_float(MICROPY_FLOAT_C_FUN(sqrt)(value/(ndarray->len-ddof)));
     }
 }   
 
