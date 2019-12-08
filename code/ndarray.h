@@ -87,6 +87,12 @@ mp_float_t ndarray_get_float_value(void *, uint8_t , size_t );
     }\
 } while(0)
     
+#define CREATE_SINGLE_ITEM(ndarray, type, typecode, value) do {\
+    (ndarray) = ndarray_new_linear_array(1, (typecode));\
+    type *tmparr = (type *)(ndarray)->array->items;\
+    tmparr[0] = (type)(value);\
+} while(0)
+
 mp_obj_t mp_obj_new_ndarray_iterator(mp_obj_t , size_t , mp_obj_iter_buf_t *);
 void ndarray_print(const mp_print_t *, mp_obj_t , mp_print_kind_t );
 ndarray_obj_t *ndarray_new_ndarray(uint8_t , size_t *, int32_t *, uint8_t );

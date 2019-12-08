@@ -67,13 +67,18 @@ size_t ndarray_index_from_contracted(size_t index, ndarray_obj_t *ndarray, int32
     return new_index + ndarray->offset;
 }
 
+size_t *ndarray_new_coords(uint8_t ndim) {
+    size_t *coords = m_new(size_t, ndim);
+    memset(coords, 0, ndim*sizeof(size_t));
+    return coords;
+}
+
 void ndarray_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t kind) {
     (void)kind;
     ndarray_obj_t *self = MP_OBJ_TO_PTR(self_in);
     size_t offset = self->offset;
     uint8_t print_extra = self->ndim;
-    size_t *coords = m_new(size_t, self->ndim);    
-    memset(coords, 0, self->ndim*sizeof(size_t));
+    size_t *coords = ndarray_new_coords(self->ndim);
     
     mp_print_str(print, "array(");
         
@@ -199,8 +204,7 @@ ndarray_obj_t *ndarray_copy_view(ndarray_obj_t *input, uint8_t typecode) {
     
     mp_obj_t item;
     size_t offset = input->offset;
-    size_t *coords = m_new(size_t, input->ndim);
-    memset(coords, 0, ndarray->ndim*sizeof(size_t));
+    size_t *coords = ndarray_new_coords(input->ndim);
     
     for(size_t i=0; i < ndarray->len; i++) {
         item = mp_binary_get_val_array(input->array->typecode, input->array->items, offset);
@@ -253,9 +257,15 @@ mp_obj_t ndarray_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw,
 
     mp_obj_t len_in = mp_obj_len_maybe(args[0]);
     size_t len = MP_OBJ_SMALL_INT_VALUE(len_in);
-
+    ndarray_obj_t *self, *ndarray;
+    
+    if(MP_OBJ_IS_TYPE(args[0], &ulab_ndarray_type)) {
+        ndarray = MP_OBJ_TO_PTR(args[0]);
+        self = ndarray_copy_view(ndarray, dtype);
+        return MP_OBJ_FROM_PTR(self);
+    }
     // work with a single dimension for now
-    ndarray_obj_t *self = ndarray_new_linear_array(len, dtype);
+    self = ndarray_new_linear_array(len, dtype);
     
     size_t i=0;
     mp_obj_iter_buf_t iter_buf;
@@ -325,7 +335,7 @@ size_t slice_length(mp_bound_slice_t slice) {
     }
 }
 
-mp_obj_t ndarray_new_view_from_tuple(ndarray_obj_t *ndarray, mp_obj_tuple_t *slices) {
+ndarray_obj_t *ndarray_new_view_from_tuple(ndarray_obj_t *ndarray, mp_obj_tuple_t *slices) {
     mp_bound_slice_t slice;
     size_t *shape_array = m_new(size_t, ndarray->ndim);
     int32_t *strides_array = m_new(int32_t, ndarray->ndim);
@@ -341,50 +351,61 @@ mp_obj_t ndarray_new_view_from_tuple(ndarray_obj_t *ndarray, mp_obj_tuple_t *sli
             strides_array[i] = ndarray->strides[i]; 
         }
     }
-    ndarray_obj_t *result = ndarray_new_view(ndarray->array, ndarray->ndim, shape_array, strides_array, offset, ndarray->boolean);
-    return MP_OBJ_FROM_PTR(result);
+    return ndarray_new_view(ndarray->array, ndarray->ndim, shape_array, strides_array, offset, ndarray->boolean);
 }
     
 mp_obj_t ndarray_assign_view_from_tuple(ndarray_obj_t *ndarray, mp_obj_tuple_t *slices, mp_obj_t value) {
     // TODO: extend this to ndarrays
+    
+    ndarray_obj_t *result = ndarray_new_view_from_tuple(ndarray, slices);
+    ndarray_obj_t *nvalue;
     if(MP_OBJ_IS_TYPE(value, &ulab_ndarray_type)) {
-        mp_raise_ValueError("slice assignment must have scalar right hand side");
+        nvalue = MP_OBJ_TO_PTR(value);
+        if(nvalue->ndim > result->ndim) {
+            mp_raise_ValueError("could not broadcast input array into output array");
+        } for(uint8_t i=0; i < nvalue->ndim; i++) {
+            if((nvalue->shape[nvalue->ndim-1-i] != 1) && 
+               (nvalue->shape[nvalue->ndim-1-i] != result->shape[result->ndim-1-i])) {
+                mp_raise_ValueError("could not broadcast input array into output array");
+            }
+        }
+    } else { // we have a scalar, so create an ndarray for it
+        size_t *shape = m_new(size_t, result->ndim*sizeof(size_t));
+        for(uint8_t i=0; i < result->ndim; i++) {
+            shape[i] = 1;
+        }
+        nvalue = ndarray_new_dense_ndarray(result->ndim, shape, result->array->typecode);
+        mp_binary_set_val_array(nvalue->array->typecode, nvalue->array->items, 0, value);
     }
-    mp_bound_slice_t slice;
-    size_t *shape_array = m_new(size_t, ndarray->ndim);
-    int32_t *strides_array = m_new(int32_t, ndarray->ndim);
-    int32_t *shape_strides = m_new(int32_t, ndarray->ndim);
-    size_t offset = ndarray->offset;
-    size_t len = 1, nindex, tindex;
-    for(uint8_t i=0; i < ndarray->ndim; i++) {
-        if(i < slices->len) { // these axes are shortened by the slices, so we generate new shapes
-            slice = generate_slice(ndarray->shape[i], slices->items[i]);
-            offset += ndarray->offset + slice.start * ndarray->strides[i];
-            shape_array[i] = slice_length(slice);
-            strides_array[i] = ndarray->strides[i] * slice.step;
-            len *= shape_array[i];
-        } else { // these axes are not affected by the slices, so we leave the shapes alone
-            shape_array[i] = ndarray->shape[i];
-            strides_array[i] = ndarray->strides[i]; 
-            len *= ndarray->shape[i];
+    size_t roffset = result->offset;
+    size_t noffset = nvalue->offset;
+    size_t *rcoords = ndarray_new_coords(result->ndim);
+    mp_obj_t item;
+    for(size_t i=0; i < result->len; i++) {
+        item = mp_binary_get_val_array(nvalue->array->typecode, nvalue->array->items, noffset);
+        mp_binary_set_val_array(result->array->typecode, result->array->items, roffset, item);
+        roffset += result->strides[result->ndim-1];
+        rcoords[result->ndim-1] += 1;
+        if(nvalue->shape[result->ndim-1] != 1) {
+            noffset += nvalue->strides[result->ndim-1];
+        }
+        for(uint8_t j=result->ndim-1; j > 0; j--) {
+            if(rcoords[j] == result->shape[j]) {
+                if(nvalue->shape[j] != 1) {
+                    noffset -= nvalue->shape[j] * nvalue->strides[j];
+                    noffset += nvalue->strides[j-1];                    
+                }
+                roffset -= result->shape[j] * result->strides[j];
+                roffset += result->strides[j-1];
+                rcoords[j] = 0;
+                rcoords[j-1] += 1;
+            } else { // coordinates can change only, if the last coordinate changes
+                break;
+            }
         }
     }
-    // we could get away with a single loop, if we re-organised this a bit
-    shape_strides[ndarray->ndim-1] = 1;
-    for(size_t i=ndarray->ndim-1; i > 0; i--) {
-        shape_strides[i-1] = shape_strides[i] * shape_array[i-1];
-    }
-    m_del(size_t, shape_array, ndarray->ndim);
-    
-    for(size_t i=0; i < len; i++) {
-        // this will set a single value
-        // TODO: get rid of the macro
-        NDARRAY_INDEX_FROM_FLAT2(ndarray, strides_array, shape_strides, i, tindex, nindex);
-        mp_binary_set_val_array(ndarray->array->typecode, ndarray->array->items, nindex, value);
-    }
-    m_del(int32_t, shape_strides, ndarray->ndim);
-    m_del(int32_t, strides_array, ndarray->ndim);
-    return mp_const_none;    
+    m_del(size_t, rcoords, result->ndim);
+    return mp_const_none;
 }
 
 mp_obj_t ndarray_subscr(mp_obj_t self, mp_obj_t index, mp_obj_t value) {
@@ -407,7 +428,8 @@ mp_obj_t ndarray_subscr(mp_obj_t self, mp_obj_t index, mp_obj_t value) {
                 }
             }
             // now we know that we can return a view
-            return ndarray_new_view_from_tuple(ndarray, tuple);
+            ndarray_obj_t *result = ndarray_new_view_from_tuple(ndarray, tuple);
+            return MP_OBJ_FROM_PTR(result);
         }
     } else { // assignment; the value must be an ndarray, or a scalar
         if(!MP_OBJ_IS_TYPE(value, &ulab_ndarray_type) && !mp_obj_is_int(value) && !mp_obj_is_float(value)) {
@@ -544,10 +566,6 @@ mp_obj_t ndarray_flatten(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_a
     ndarray_obj_t *ndarray = MP_OBJ_TO_PTR(pos_args[0]);
     
     GET_STR_DATA_LEN(args[0].u_obj, order, clen);
-/*    size_t len = 1;
-    for(uint8_t i=0; i < ndarray->ndim; i++) {
-        len *= ndarray->shape[i];
-    }*/
     if((clen != 1) || ((memcmp(order, "C", 1) != 0) && (memcmp(order, "F", 1) != 0))) {
         mp_raise_ValueError("flattening order must be either 'C', or 'F'");        
     }
@@ -563,8 +581,7 @@ mp_obj_t ndarray_flatten(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_a
     } else {
         uint8_t *rarray = (uint8_t *)result->array->items;
         uint8_t *narray = (uint8_t *)ndarray->array->items;
-        size_t *coords = m_new(size_t, ndarray->ndim);
-        memset(coords, 0, ndarray->ndim*sizeof(size_t));
+        size_t *coords = ndarray_new_coords(ndarray->ndim);
 
         size_t offset = ndarray->offset;
         if(memcmp(order, "C", 1) == 0) { // C order; this is a view, so we have to collect the items
@@ -632,8 +649,47 @@ mp_obj_t ndarray_itemsize(mp_obj_t self_in) {
     return mp_obj_new_int(mp_binary_get_size('@', self->array->typecode, NULL));
 }
 
+/*
+ndarray_obj_t *broadcasting(ndarray_obj_t *in1, ndarray_obj_t *in2) {
+    // 
+    uint8_t ndim = (in1->ndim > in2->ndim) ? in1->ndim : in2->ndim;    
+    uint8_t dtype;
+    ndarray_obj_t *ndarray;
+    size_t *shape = m_new(size_t, ndim);
+    if(in1->ndim < in2->ndim) {
+        for(uint8_t i=0; i < ndim; i++) {
+            //shape[i] = 
+        }
+    }
+    ndarray_obj_t *ndarray = ndarray_new_dense_ndarray(ndim, shape, dtype);
+    return ndarray;
+}
+*/
 // Binary operations
 mp_obj_t ndarray_binary_op(mp_binary_op_t op, mp_obj_t lhs, mp_obj_t rhs) {
+    // First, handle the case, when one of the operands is a scalar
+    ndarray_obj_t *RHS;
+    if(mp_obj_is_int(rhs)) {
+        int32_t ivalue = mp_obj_get_int(rhs);
+        if((ivalue > 0) && (ivalue < 256)) {
+            CREATE_SINGLE_ITEM(RHS, uint8_t, NDARRAY_UINT8, ivalue);
+        } else if((ivalue > 255) && (ivalue < 65535)) {
+            CREATE_SINGLE_ITEM(RHS, uint16_t, NDARRAY_UINT16, ivalue);
+        } else if((ivalue < 0) && (ivalue > -128)) {
+            CREATE_SINGLE_ITEM(RHS, int8_t, NDARRAY_INT8, ivalue);
+        } else if((ivalue < -127) && (ivalue > -32767)) {
+            CREATE_SINGLE_ITEM(RHS, int16_t, NDARRAY_INT16, ivalue);
+        } else { // the integer value clearly does not fit the ulab types, so move on to float
+            CREATE_SINGLE_ITEM(RHS, mp_float_t, NDARRAY_FLOAT, ivalue);
+        }
+    } else if(mp_obj_is_float(rhs)) {
+        mp_float_t fvalue = mp_obj_get_float(rhs);        
+        CREATE_SINGLE_ITEM(RHS, mp_float_t, NDARRAY_FLOAT, fvalue);
+    } else {
+        RHS = MP_OBJ_TO_PTR(rhs);
+    }
+    
+//    return MP_OBJ_FROM_PTR(ndarray);
     return mp_const_none;
 }
 
