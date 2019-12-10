@@ -355,56 +355,66 @@ ndarray_obj_t *ndarray_new_view_from_tuple(ndarray_obj_t *ndarray, mp_obj_tuple_
 }
     
 mp_obj_t ndarray_assign_view_from_tuple(ndarray_obj_t *ndarray, mp_obj_tuple_t *slices, mp_obj_t value) {
-    // TODO: extend this to ndarrays
-    
-    ndarray_obj_t *result = ndarray_new_view_from_tuple(ndarray, slices);
-    ndarray_obj_t *nvalue;
+    ndarray_obj_t *lhs = ndarray_new_view_from_tuple(ndarray, slices);
+    ndarray_obj_t *rhs;
     if(MP_OBJ_IS_TYPE(value, &ulab_ndarray_type)) {
-        nvalue = MP_OBJ_TO_PTR(value);
-        if(nvalue->ndim > result->ndim) {
+        rhs = MP_OBJ_TO_PTR(value);
+        // since this is an assignment, the left hand side should definitely be able to contain the right hand side
+        if(rhs->ndim > lhs->ndim) {
             mp_raise_ValueError("could not broadcast input array into output array");
-        } for(uint8_t i=0; i < nvalue->ndim; i++) {
-            if((nvalue->shape[nvalue->ndim-1-i] != 1) && 
-               (nvalue->shape[nvalue->ndim-1-i] != result->shape[result->ndim-1-i])) {
+        } for(uint8_t i=0; i < rhs->ndim; i++) {
+            if((rhs->shape[rhs->ndim-1-i] != 1) &&
+               (rhs->shape[rhs->ndim-1-i] != lhs->shape[lhs->ndim-1-i])) {
                 mp_raise_ValueError("could not broadcast input array into output array");
             }
         }
     } else { // we have a scalar, so create an ndarray for it
-        size_t *shape = m_new(size_t, result->ndim*sizeof(size_t));
-        for(uint8_t i=0; i < result->ndim; i++) {
+        size_t *shape = m_new(size_t, lhs->ndim*sizeof(size_t));
+        for(uint8_t i=0; i < lhs->ndim; i++) {
             shape[i] = 1;
         }
-        nvalue = ndarray_new_dense_ndarray(result->ndim, shape, result->array->typecode);
-        mp_binary_set_val_array(nvalue->array->typecode, nvalue->array->items, 0, value);
+        rhs = ndarray_new_dense_ndarray(lhs->ndim, shape, lhs->array->typecode);
+        mp_binary_set_val_array(rhs->array->typecode, rhs->array->items, 0, value);
     }
-    size_t roffset = result->offset;
-    size_t noffset = nvalue->offset;
-    size_t *rcoords = ndarray_new_coords(result->ndim);
+    size_t roffset = rhs->offset;
+    size_t loffset = lhs->offset;
+    size_t *lcoords = ndarray_new_coords(lhs->ndim);
     mp_obj_t item;
-    for(size_t i=0; i < result->len; i++) {
-        item = mp_binary_get_val_array(nvalue->array->typecode, nvalue->array->items, noffset);
-        mp_binary_set_val_array(result->array->typecode, result->array->items, roffset, item);
-        roffset += result->strides[result->ndim-1];
-        rcoords[result->ndim-1] += 1;
-        if(nvalue->shape[result->ndim-1] != 1) {
-            noffset += nvalue->strides[result->ndim-1];
-        }
-        for(uint8_t j=result->ndim-1; j > 0; j--) {
-            if(rcoords[j] == result->shape[j]) {
-                if(nvalue->shape[j] != 1) {
-                    noffset -= nvalue->shape[j] * nvalue->strides[j];
-                    noffset += nvalue->strides[j-1];                    
+    uint8_t diff_ndim = lhs->ndim - rhs->ndim;
+    for(size_t i=0; i < lhs->len; i++) {
+        item = mp_binary_get_val_array(rhs->array->typecode, rhs->array->items, roffset);
+        mp_binary_set_val_array(lhs->array->typecode, lhs->array->items, loffset, item);
+        for(uint8_t j=lhs->ndim-1; j > 0; j--) {
+            loffset += lhs->strides[j];
+            lcoords[j] += 1;
+            if(j >= diff_ndim) {
+                if(rhs->shape[j-diff_ndim] != 1) {
+                    roffset += rhs->strides[j-diff_ndim];
                 }
-                roffset -= result->shape[j] * result->strides[j];
-                roffset += result->strides[j-1];
-                rcoords[j] = 0;
-                rcoords[j-1] += 1;
+            }
+            if(lcoords[j] == lhs->shape[j]) { // we are at a dimension boundary
+                if(j > diff_ndim) { // this means right-hand-side coordinates that haven't been prepended
+                    if(rhs->shape[j-diff_ndim] != 1) {
+                        // if rhs->shape[j-diff_ndim] != 1, then rhs->shape[j-diff_ndim] == lhs->shape[j],
+                        // so we can advance the offset counter
+                        roffset -= rhs->shape[j-diff_ndim] * rhs->strides[j-diff_ndim];
+                        roffset += rhs->strides[j-diff_ndim-1];
+                    } else { // rhs->shape[j-diff_ndim] == 1
+                        roffset -= rhs->strides[j-diff_ndim];
+                    }
+                } else {
+                    roffset = rhs->offset;
+                }
+                loffset -= lhs->shape[j] * lhs->strides[j];
+                loffset += lhs->strides[j-1];
+                lcoords[j] = 0;
+                lcoords[j-1] += 1;
             } else { // coordinates can change only, if the last coordinate changes
                 break;
             }
         }
     }
-    m_del(size_t, rcoords, result->ndim);
+    m_del(size_t, lcoords, lhs->ndim);
     return mp_const_none;
 }
 
