@@ -93,6 +93,18 @@ mp_float_t ndarray_get_float_value(void *, uint8_t , size_t );
     tmparr[0] = (type)(value);\
 } while(0)
 
+#define RUN_BINARY_LOOP(ndarray, typecode, type_out, type_left, type_right, lhs, rhs, shape, ndim, operator) do {\
+    uint8_t *left = (uint8_t *)(lhs)->array->items;\
+    uint8_t *right = (uint8_t *)(rhs)->array->items;\
+    (ndarray) = ndarray_new_dense_ndarray((ndim), (shape), (typecode));\
+    uint8_t size_left = sizeof(type_left), size_right = sizeof(type_right);\
+    type_out *out = (type_out *)ndarray->array->items;\
+    for(size_t i=0; i < (lhs)->len; i++) {\
+        out[i] = *(type_left *)left + *(type_right *)right;\
+        left += size_left; right += size_right;\
+    }\
+} while(0)
+
 mp_obj_t mp_obj_new_ndarray_iterator(mp_obj_t , size_t , mp_obj_iter_buf_t *);
 void ndarray_print(const mp_print_t *, mp_obj_t , mp_print_kind_t );
 ndarray_obj_t *ndarray_new_ndarray(uint8_t , size_t *, int32_t *, uint8_t );

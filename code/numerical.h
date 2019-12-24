@@ -59,7 +59,7 @@ mp_obj_t numerical_std(size_t , const mp_obj_t *, mp_map_t *);
     ave /= j;\
     for(j=0; j < (shape_ax); j++, (offset) += (stride)) {\
         x = array[(offset)] - ave;\
-        sq_sum += x * x;\
+        (sq_sum) += x * x;\
     }\
 } while(0)
 
