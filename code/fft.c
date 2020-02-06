@@ -19,6 +19,8 @@
 #include "ndarray.h"
 #include "fft.h"
 
+#if ULAB_FFT_FFT || ULAB_FFT_IFFT || ULAB_FFT_SPECTRUM
+
 enum FFT_TYPE {
     FFT_FFT,
     FFT_IFFT,
@@ -75,47 +77,38 @@ void fft_kernel(mp_float_t *real, mp_float_t *imag, int n, int isign) {
 }
 
 mp_obj_t fft_fft_ifft_spectrum(size_t n_args, mp_obj_t arg_re, mp_obj_t arg_im, uint8_t type) {
-    if(!mp_obj_is_type(arg_re, &ulab_ndarray_type)) {
-        mp_raise_NotImplementedError("FFT is defined for ndarrays only");
+    if(!MP_OBJ_IS_TYPE(arg_re, &ulab_ndarray_type)) {
+        mp_raise_NotImplementedError(translate("FFT is defined for ndarrays only"));
     } 
     if(n_args == 2) {
-        if(!mp_obj_is_type(arg_im, &ulab_ndarray_type)) {
-            mp_raise_NotImplementedError("FFT is defined for ndarrays only");
+        if(!MP_OBJ_IS_TYPE(arg_im, &ulab_ndarray_type)) {
+            mp_raise_NotImplementedError(translate("FFT is defined for ndarrays only"));
         }
     }
     // Check if input is of length of power of 2
     ndarray_obj_t *re = MP_OBJ_TO_PTR(arg_re);
     uint16_t len = re->array->len;
     if((len & (len-1)) != 0) {
-        mp_raise_ValueError("input array length must be power of 2");
+        // TODO: pad the input vector, if the length is not a power of 2
+        mp_raise_ValueError(translate("input array length must be power of 2"));
     }
     
-    ndarray_obj_t *out_re = create_new_ndarray(1, len, NDARRAY_FLOAT);
-    mp_float_t *data_re = (mp_float_t *)out_re->array->items;
+    ndarray_obj_t *ndarray_re = ndarray_new_ndarray(len, NDARRAY_FLOAT);
+    mp_float_t *data_re = (mp_float_t *)ndarray_re->array->items;
     
-    if(re->array->typecode == NDARRAY_FLOAT) { 
-        // By treating this case separately, we can save a bit of time.
-        // I don't know if it is worthwhile, though...
-        memcpy((mp_float_t *)out_re->array->items, (mp_float_t *)re->array->items, re->bytes);
-    } else {
-        for(size_t i=0; i < len; i++) {
-            data_re[i] = ndarray_get_float_value(re->array->items, re->array->typecode, i);
-        }
+    for(size_t i=0; i < len; i++) {
+        data_re[i] = ndarray_get_float_value(re->array->items, re->array->typecode, re->offset+i*re->stride);
     }
-    ndarray_obj_t *out_im = create_new_ndarray(1, len, NDARRAY_FLOAT);
-    mp_float_t *data_im = (mp_float_t *)out_im->array->items;
+    ndarray_obj_t *ndarray_im = ndarray_new_ndarray(len, NDARRAY_FLOAT);
+    mp_float_t *data_im = (mp_float_t *)ndarray_im->array->items;
 
     if(n_args == 2) {
         ndarray_obj_t *im = MP_OBJ_TO_PTR(arg_im);
-        if (re->array->len != im->array->len) {
-            mp_raise_ValueError("real and imaginary parts must be of equal length");
+        if (re->len != im->len) {
+            mp_raise_ValueError(translate("real and imaginary parts must be of equal length"));
         }
-        if(im->array->typecode == NDARRAY_FLOAT) {
-            memcpy((mp_float_t *)out_im->array->items, (mp_float_t *)im->array->items, im->bytes);
-        } else {
-            for(size_t i=0; i < len; i++) {
-                data_im[i] = ndarray_get_float_value(im->array->items, im->array->typecode, i);
-            }
+        for(size_t i=0; i < len; i++) {
+            data_im[i] = ndarray_get_float_value(im->array->items, im->array->typecode, im->offset+i*im->stride);
         }
     }
     if((type == FFT_FFT) || (type == FFT_SPECTRUM)) {
@@ -134,15 +127,16 @@ mp_obj_t fft_fft_ifft_spectrum(size_t n_args, mp_obj_t arg_re, mp_obj_t arg_im, 
         }
     }
     if(type == FFT_SPECTRUM) {
-        return MP_OBJ_TO_PTR(out_re);
+        return MP_OBJ_TO_PTR(ndarray_re);
     } else {
         mp_obj_t tuple[2];
-        tuple[0] = out_re;
-        tuple[1] = out_im;
+        tuple[0] = ndarray_re;
+        tuple[1] = ndarray_im;
         return mp_obj_new_tuple(2, tuple);
     }
 }
 
+#if ULAB_FFT_FFT
 mp_obj_t fft_fft(size_t n_args, const mp_obj_t *args) {
     if(n_args == 2) {
         return fft_fft_ifft_spectrum(n_args, args[0], args[1], FFT_FFT);
@@ -150,7 +144,10 @@ mp_obj_t fft_fft(size_t n_args, const mp_obj_t *args) {
         return fft_fft_ifft_spectrum(n_args, args[0], mp_const_none, FFT_FFT);        
     }
 }
+MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(fft_fft_obj, 1, 2, fft_fft);
+#endif
 
+#if ULAB_FFT_IFFT
 mp_obj_t fft_ifft(size_t n_args, const mp_obj_t *args) {
     if(n_args == 2) {
         return fft_fft_ifft_spectrum(n_args, args[0], args[1], FFT_IFFT);
@@ -158,7 +155,10 @@ mp_obj_t fft_ifft(size_t n_args, const mp_obj_t *args) {
         return fft_fft_ifft_spectrum(n_args, args[0], mp_const_none, FFT_IFFT);
     }
 }
+MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(fft_ifft_obj, 1, 2, fft_ifft);
+#endif
 
+#if ULAB_FFT_SPECTRUM
 mp_obj_t fft_spectrum(size_t n_args, const mp_obj_t *args) {
     if(n_args == 2) {
         return fft_fft_ifft_spectrum(n_args, args[0], args[1], FFT_SPECTRUM);
@@ -166,3 +166,7 @@ mp_obj_t fft_spectrum(size_t n_args, const mp_obj_t *args) {
         return fft_fft_ifft_spectrum(n_args, args[0], mp_const_none, FFT_SPECTRUM);
     }
 }
+MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(fft_spectrum_obj, 1, 2, fft_spectrum);
+#endif
+
+#endif
