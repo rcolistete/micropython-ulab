@@ -34,6 +34,7 @@
 extern const mp_obj_type_t ulab_ndarray_type;
 
 enum NDARRAY_TYPE {
+    NDARRAY_BOOL = '?', // this must never be assigned to the typecode!
     NDARRAY_UINT8 = 'B',
     NDARRAY_INT8 = 'b',
     NDARRAY_UINT16 = 'H', 
@@ -43,10 +44,13 @@ enum NDARRAY_TYPE {
 
 typedef struct _ndarray_obj_t {
     mp_obj_base_t base;
-    size_t m, n;
+    uint8_t boolean;
+    uint8_t ndim;
+    size_t *shape;
+    int32_t *strides;
     size_t len;
+    size_t offset;
     mp_obj_array_t *array;
-    size_t bytes;
 } ndarray_obj_t;
 
 mp_obj_t mp_obj_new_ndarray_iterator(mp_obj_t , size_t , mp_obj_iter_buf_t *);
