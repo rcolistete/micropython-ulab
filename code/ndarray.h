@@ -31,6 +31,9 @@
 
 #define SWAP(t, a, b) { t tmp = a; a = b; b = tmp; }
 
+#define NDARRAY_NUMERIC   0
+#define NDARRAY_BOOLEAN   1
+
 extern const mp_obj_type_t ulab_ndarray_type;
 
 enum NDARRAY_TYPE {

@@ -16,19 +16,19 @@
 #define ULAB_VECTORISE_MODULE (1)
 
 // linalg adds around 6 kB
-#define ULAB_LINALG_MODULE (1)
+#define ULAB_LINALG_MODULE (0)
 
 // poly is approx. 2.5 kB
-#define ULAB_POLY_MODULE (1)
+#define ULAB_POLY_MODULE (0)
 
 // numerical is about 12 kB
-#define ULAB_NUMERICAL_MODULE (1)
+#define ULAB_NUMERICAL_MODULE (0)
 
 // FFT costs about 2 kB of flash space
-#define ULAB_FFT_MODULE (1)
+#define ULAB_FFT_MODULE (0)
 
 // the filter module takes about 1 kB of flash space
-#define ULAB_FILTER_MODULE (1)
+#define ULAB_FILTER_MODULE (0)
 
 // user-defined modules
 #define ULAB_EXTRAS_MODULE (0)
