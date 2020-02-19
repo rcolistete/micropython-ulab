@@ -107,6 +107,10 @@ mp_int_t ndarray_get_buffer(mp_obj_t obj, mp_buffer_info_t *bufinfo, mp_uint_t f
 */
 
 #define RUN_BINARY_LOOP(typecode, type_out, type_left, type_right, ol, or, op) do {\
+} while(0)
+
+/*
+#define RUN_BINARY_LOOP(typecode, type_out, type_left, type_right, ol, or, op) do {\
     type_left *left = (type_left *)(ol)->array->items;\
     type_right *right = (type_right *)(or)->array->items;\
     uint8_t inc = 0;\
@@ -148,5 +152,5 @@ mp_int_t ndarray_get_buffer(mp_obj_t obj, mp_buffer_info_t *bufinfo, mp_uint_t f
         return out_list;\
     }\
 } while(0)
-
+*/
 #endif

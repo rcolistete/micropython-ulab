@@ -18,6 +18,7 @@
 #include "py/obj.h"
 #include "py/objtuple.h"
 #include "ndarray.h"
+#include "ndarray_properties.h"
 
 // This function is copied verbatim from objarray.c
 STATIC mp_obj_array_t *array_new(char typecode, size_t n) {
@@ -173,6 +174,7 @@ ndarray_obj_t *ndarray_new_view(mp_obj_array_t *array, uint8_t ndim, size_t *sha
 
 STATIC uint8_t ndarray_init_helper(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
     static const mp_arg_t allowed_args[] = {
+        // TOOD: I haven't the foggiest idea as to why mp_const_none_obj causes problems.
         { MP_QSTR_, MP_ARG_REQUIRED | MP_ARG_OBJ, {.u_rom_obj = MP_ROM_PTR(&mp_const_none_obj)} },
         { MP_QSTR_dtype, MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = NDARRAY_FLOAT } },
     };
@@ -185,13 +187,6 @@ STATIC uint8_t ndarray_init_helper(size_t n_args, const mp_obj_t *pos_args, mp_m
     return dtype;
 }
 
-ndarray_obj_t *ndarray_new_linear_array(size_t len, uint8_t dtype) {
-    size_t *shape = m_new(size_t, 1);
-    int32_t *strides = m_new(int32_t, 1);
-    shape[0] = len;
-    strides[0] = 1;
-    return ndarray_new_ndarray(1, shape, strides, dtype);
-}
 ndarray_obj_t *ndarray_new_linear_array(size_t len, uint8_t dtype) {
     size_t *shape = m_new(size_t, 1);
     int32_t *strides = m_new(int32_t, 1);
@@ -289,11 +284,16 @@ mp_obj_t ndarray_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw,
 }
 */
 
+mp_obj_t ndarray_get_slice(ndarray_obj_t *ndarray, mp_obj_t index, ndarray_obj_t *values) {
+    // return 1 for now
+    return mp_obj_new_int(1);
+}
+
 mp_obj_t ndarray_subscr(mp_obj_t self_in, mp_obj_t index, mp_obj_t value) {
     ndarray_obj_t *self = MP_OBJ_TO_PTR(self_in);
     
     if (value == MP_OBJ_SENTINEL) { // return value(s)
-        return ndarray_get_slice(self, index, NULL);    
+        return ndarray_get_slice(self, index, NULL);
     } else { // assignment to slices; the value must be an ndarray, or a scalar
         if(!MP_OBJ_IS_TYPE(value, &ulab_ndarray_type) && 
           !MP_OBJ_IS_INT(value) && !mp_obj_is_float(value)) {
@@ -315,10 +315,7 @@ mp_obj_t ndarray_subscr(mp_obj_t self_in, mp_obj_t index, mp_obj_t value) {
     return mp_const_none;
 }
 
-
-
 // itarray iterator
-
 mp_obj_t ndarray_getiter(mp_obj_t o_in, mp_obj_iter_buf_t *iter_buf) {
     return mp_obj_new_ndarray_iterator(o_in, 0, iter_buf);
 }
@@ -329,7 +326,6 @@ typedef struct _mp_obj_ndarray_it_t {
     mp_obj_t ndarray;
     size_t cur;
 } mp_obj_ndarray_it_t;
-
 
 mp_obj_t ndarray_iternext(mp_obj_t self_in) {
     mp_obj_ndarray_it_t *self = MP_OBJ_TO_PTR(self_in);
@@ -396,14 +392,31 @@ mp_obj_t ndarray_itemsize(mp_obj_t self_in) {
 }
 
 
-// Binary operations
+bool can_broadcast(ndarray_obj_t *lhs, ndarray_obj_t *rhs) {
+    // returns true, if arrays can be broadcast together, false otherwise
+    // at the moment, it checks strict shape compatibility
+    for(uint8_t i=0; i < lhs->ndim; i++) {
+        if(lhs->shape[i] != rhs->shape[i]) {
+            return mp_const_false;
+        }
+    }
+    return true;
+}
 
-mp_obj_t ndarray_binary_op(mp_binary_op_t op, mp_obj_t lhs, mp_obj_t rhs) {
-//    if(op == MP_BINARY_OP_REVERSE_ADD) {
- //       return ndarray_binary_op(MP_BINARY_OP_ADD, rhs, lhs);
-  //  }    
-    // One of the operands is a scalar
-    // TODO: conform to numpy with the upcasting
+// Binary operations
+mp_obj_t ndarray_binary_op_helper(mp_binary_op_t op, mp_obj_t lhs, mp_obj_t rhs) {
+    /*
+    * Since the number of ndarray types is lower than in numpy, we have to define
+    * our own upcasting rules. These are stipulated here for now:
+    * uint8 + int8 => int16
+    * uint8 + int16 => int16
+    * uint8 + uint16 => uint16
+    * int8 + int16 => int16
+    * int8 + uint16 => uint16
+    * uint16 + int16 => float
+    */
+    
+    // One of the operands is a scalar 
     // TODO: implement in-place operators
     mp_obj_t RHS = MP_OBJ_NULL;
     bool rhs_is_scalar = true;
@@ -417,7 +430,7 @@ mp_obj_t ndarray_binary_op(mp_binary_op_t op, mp_obj_t lhs, mp_obj_t rhs) {
             CREATE_SINGLE_ITEM(RHS, int8_t, NDARRAY_INT8, ivalue);
         } else if((ivalue < -127) && (ivalue > -32767)) {
             CREATE_SINGLE_ITEM(RHS, int16_t, NDARRAY_INT16, ivalue);
-        } else { // the integer value clearly does not fit the ulab types, so move on to float
+        } else { // the integer value clearly does not fit the ulab integer types, so move on to float
             CREATE_SINGLE_ITEM(RHS, mp_float_t, NDARRAY_FLOAT, ivalue);
         }
     } else if(mp_obj_is_float(rhs)) {
@@ -432,17 +445,25 @@ mp_obj_t ndarray_binary_op(mp_binary_op_t op, mp_obj_t lhs, mp_obj_t rhs) {
         // next, the ndarray stuff
         ndarray_obj_t *ol = MP_OBJ_TO_PTR(lhs);
         ndarray_obj_t *or = MP_OBJ_TO_PTR(RHS);
-        if(!rhs_is_scalar && ((ol->m != or->m) || (ol->n != or->n))) {
-            mp_raise_ValueError(translate("operands could not be broadcast together"));
+        if(!rhs_is_scalar) {
+            if(!can_broadcast(ol, or)) {
+                mp_raise_ValueError(translate("operands could not be broadcast together"));
+            }
         }
         // At this point, the operands should have the same shape
         switch(op) {
             case MP_BINARY_OP_EQUAL:
-                // Two arrays are equal, if their shape, typecode, and elements are equal
-                if((ol->m != or->m) || (ol->n != or->n) || (ol->array->typecode != or->array->typecode)) {
+                // Two arrays are equal, if their shape, strides, typecode, and elements are equal
+                // TODO: check, whether this is what numpy assumes
+                if((ol->ndim != or->ndim) || (ol->len != or->len) || (ol->array->typecode != or->array->typecode)) {
                     return mp_const_false;
                 } else {
-                    size_t i = ol->bytes;
+                    for(uint8_t i=0; i < ol->ndim; i++) {
+                        if((ol->shape[i] != or->shape[i]) || (ol->strides[i] != or->strides[i])) {
+                            return mp_const_false;
+                        }
+                    }
+                    size_t i = ol->len * mp_binary_get_size('@', ol->array->typecode, NULL);
                     uint8_t *l = (uint8_t *)ol->array->items;
                     uint8_t *r = (uint8_t *)or->array->items;
                     while(i) { // At this point, we can simply compare the bytes, the type is irrelevant
@@ -467,12 +488,6 @@ mp_obj_t ndarray_binary_op(mp_binary_op_t op, mp_obj_t lhs, mp_obj_t rhs) {
                 // These are the upcasting rules
                 // float always becomes float
                 // operation on identical types preserves type
-                // uint8 + int8 => int16
-                // uint8 + int16 => int16
-                // uint8 + uint16 => uint16
-                // int8 + int16 => int16
-                // int8 + uint16 => uint16
-                // uint16 + int16 => float
                 // The parameters of RUN_BINARY_LOOP are 
                 // typecode of result, type_out, type_left, type_right, lhs operand, rhs operand, operator
                 if(ol->array->typecode == NDARRAY_UINT8) {
@@ -548,15 +563,23 @@ mp_obj_t ndarray_binary_op(mp_binary_op_t op, mp_obj_t lhs, mp_obj_t rhs) {
     }
 }
 
+mp_obj_t ndarray_binary_op(mp_binary_op_t op, mp_obj_t lhs, mp_obj_t rhs) {
+    if(op == MP_BINARY_OP_REVERSE_ADD) {
+        return ndarray_binary_op(MP_BINARY_OP_ADD, rhs, lhs);
+    } else {
+        return ndarray_binary_op(MP_BINARY_OP_ADD, lhs, rhs);    
+    }
+}
+
 mp_obj_t ndarray_unary_op(mp_unary_op_t op, mp_obj_t self_in) {
     ndarray_obj_t *self = MP_OBJ_TO_PTR(self_in);
     ndarray_obj_t *ndarray = NULL;
     switch (op) {
         case MP_UNARY_OP_LEN: 
-            if(self->m > 1) {
-                return mp_obj_new_int(self->m);
+            if(self->ndim > 1) {
+                return mp_obj_new_int(self->ndim);
             } else {
-                return mp_obj_new_int(self->n);
+                return mp_obj_new_int(self->len);
             }
             break;
         
@@ -568,7 +591,8 @@ mp_obj_t ndarray_unary_op(mp_unary_op_t op, mp_obj_t self_in) {
             // between different typecodes
             ndarray = MP_OBJ_TO_PTR(ndarray_copy(self_in));
             uint8_t *array = (uint8_t *)ndarray->array->items;
-            for(size_t i=0; i < self->bytes; i++) array[i] = ~array[i];
+            uint8_t itemsize = mp_binary_get_size('@', ndarray->array->typecode, NULL);
+            for(size_t i=0; i < ndarray->len*itemsize; i++) array[i] = ~array[i];
             return MP_OBJ_FROM_PTR(ndarray);
             break;
         
@@ -624,34 +648,9 @@ mp_obj_t ndarray_unary_op(mp_unary_op_t op, mp_obj_t self_in) {
 }
 
 mp_obj_t ndarray_transpose(mp_obj_t self_in) {
-    ndarray_obj_t *self = MP_OBJ_TO_PTR(self_in);
-    // the size of a single item in the array
-    uint8_t _sizeof = mp_binary_get_size('@', self->array->typecode, NULL);
-    
-    // NOTE: 
-    // if the matrices are square, we can simply swap items, but 
-    // generic matrices can't be transposed in place, so we have to 
-    // declare a temporary variable
-    
-    // NOTE: 
-    //  In the old matrix, the coordinate (m, n) is m*self->n + n
-    //  We have to assign this to the coordinate (n, m) in the new 
-    //  matrix, i.e., to n*self->m + m (since the new matrix has self->m columns)
-    
-    // one-dimensional arrays can be transposed by simply swapping the dimensions
-    if((self->m != 1) && (self->n != 1)) {
-        uint8_t *c = (uint8_t *)self->array->items;
-        // self->bytes is the size of the bytearray, irrespective of the typecode
-        uint8_t *tmp = m_new(uint8_t, self->bytes);
-        for(size_t m=0; m < self->m; m++) {
-            for(size_t n=0; n < self->n; n++) {
-                memcpy(tmp+_sizeof*(n*self->m + m), c+_sizeof*(m*self->n + n), _sizeof);
-            }
-        }
-        memcpy(self->array->items, tmp, self->bytes);
-        m_del(uint8_t, tmp, self->bytes);
-    } 
-    SWAP(size_t, self->m, self->n);
+    //ndarray_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    //uint8_t itemsize = mp_binary_get_size('@', self->array->typecode, NULL);
+    // TODO: copy code from ndim
     return mp_const_none;
 }
 
