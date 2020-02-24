@@ -78,7 +78,6 @@ mp_obj_t vectorise_generic_vector(mp_obj_t o_in, mp_float_t (*f)(mp_float_t)) {
             mp_float_t *dataout = (mp_float_t *)out->array->items;
             mp_obj_iter_buf_t iter_buf;
             mp_obj_t item, iterable = mp_getiter(o_in, &iter_buf);
-            size_t i=0;
             while ((item = mp_iternext(iterable)) != MP_OBJ_STOP_ITERATION) {
                 x = mp_obj_get_float(item);
                 *dataout++ = f(x);

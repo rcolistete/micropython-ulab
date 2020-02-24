@@ -20,7 +20,7 @@
 
 #include "ulab.h"
 #include "ndarray.h"
-#include "ndarray_properties.h"
+//#include "ndarray_properties.h"
 #include "linalg.h"
 #include "vectorise.h"
 #include "poly.h"
@@ -31,13 +31,16 @@
 
 STATIC MP_DEFINE_STR_OBJ(ulab_version_obj, "0.33.2-matrix");
 
+
+MP_DEFINE_CONST_FUN_OBJ_1(ndarray_size_obj, ndarray_size);
+
 STATIC const mp_rom_map_elem_t ulab_ndarray_locals_dict_table[] = {
-    { MP_ROM_QSTR(MP_QSTR_flatten), MP_ROM_PTR(&ndarray_flatten_obj) },
+//    { MP_ROM_QSTR(MP_QSTR_flatten), MP_ROM_PTR(&ndarray_flatten_obj) },
     { MP_ROM_QSTR(MP_QSTR_reshape), MP_ROM_PTR(&ndarray_reshape_obj) },
     { MP_ROM_QSTR(MP_QSTR_transpose), MP_ROM_PTR(&ndarray_transpose_obj) },
-    { MP_ROM_QSTR(MP_QSTR_shape), MP_ROM_PTR(&ndarray_shape_obj) },
+//    { MP_ROM_QSTR(MP_QSTR_shape), MP_ROM_PTR(&ndarray_shape_obj) },
     { MP_ROM_QSTR(MP_QSTR_size), MP_ROM_PTR(&ndarray_size_obj) },
-    { MP_ROM_QSTR(MP_QSTR_itemsize), MP_ROM_PTR(&ndarray_itemsize_obj) },
+//    { MP_ROM_QSTR(MP_QSTR_itemsize), MP_ROM_PTR(&ndarray_itemsize_obj) },
 //    { MP_ROM_QSTR(MP_QSTR_sort), MP_ROM_PTR(&numerical_sort_inplace_obj) },
 };
 
@@ -48,10 +51,10 @@ const mp_obj_type_t ulab_ndarray_type = {
     .name = MP_QSTR_ndarray,
     .print = ndarray_print,
     .make_new = ndarray_make_new,
-    .subscr = ndarray_subscr,
+//    .subscr = ndarray_subscr,
     .getiter = ndarray_getiter,
     .unary_op = ndarray_unary_op,
-    .binary_op = ndarray_binary_op,
+//    .binary_op = ndarray_binary_op,
     .buffer_p = { .get_buffer = ndarray_get_buffer, },
     .locals_dict = (mp_obj_dict_t*)&ulab_ndarray_locals_dict,
 };

@@ -51,7 +51,9 @@ typedef struct _ndarray_obj_t {
     uint8_t ndim;
     size_t *shape;
     int32_t *strides;
+    // we could, perhaps, get rid of this, since len can always be calculated from the shape
     size_t len;
+    // we could move the pointer in *array, in which case, offset can be removed
     size_t offset;
     mp_obj_array_t *array;
 } ndarray_obj_t;
@@ -61,12 +63,14 @@ mp_obj_t mp_obj_new_ndarray_iterator(mp_obj_t , size_t , mp_obj_iter_buf_t *);
 mp_float_t ndarray_get_float_value(void *, uint8_t , size_t );
 void fill_array_iterable(mp_float_t *, mp_obj_t );
 
-void ndarray_print_row(const mp_print_t *, mp_obj_array_t *, size_t , size_t );
 void ndarray_print(const mp_print_t *, mp_obj_t , mp_print_kind_t );
 void ndarray_assign_elements(mp_obj_array_t *, mp_obj_t , uint8_t , size_t *);
 ndarray_obj_t *create_new_ndarray(size_t , size_t , uint8_t );
+ndarray_obj_t *ndarray_new_dense_ndarray(uint8_t , size_t *, uint8_t );
+ndarray_obj_t *ndarray_new_ndarray(uint8_t , size_t *, int32_t *, uint8_t );
+ndarray_obj_t *ndarray_new_linear_array(size_t , uint8_t );
 
-mp_obj_t ndarray_copy(mp_obj_t );
+//mp_obj_t ndarray_copy(mp_obj_t );
 #ifdef CIRCUITPY
 mp_obj_t ndarray_make_new(const mp_obj_type_t *type, size_t n_args, const mp_obj_t *args, mp_map_t *kw_args);
 #else
@@ -78,8 +82,11 @@ mp_obj_t ndarray_binary_op(mp_binary_op_t , mp_obj_t , mp_obj_t );
 mp_obj_t ndarray_unary_op(mp_unary_op_t , mp_obj_t );
 
 mp_obj_t ndarray_shape(mp_obj_t );
+MP_DECLARE_CONST_FUN_OBJ_1(ndarray_shape_obj);
+
 mp_obj_t ndarray_size(mp_obj_t );
 mp_obj_t ndarray_itemsize(mp_obj_t );
+mp_obj_t ndarray_ndim(mp_obj_t );
 mp_obj_t ndarray_flatten(size_t , const mp_obj_t *, mp_map_t *);
 
 mp_obj_t ndarray_reshape(mp_obj_t , mp_obj_t );
@@ -106,7 +113,21 @@ mp_int_t ndarray_get_buffer(mp_obj_t obj, mp_buffer_info_t *bufinfo, mp_uint_t f
     should work outside the loop, but it doesn't. Go figure! 
 */
 
+#define NDARRAY_INDEX_FROM_FLAT2(ndarray, stride_array, shape_strides, index, _tindex, _nindex) do {\
+    size_t Q;\
+    (_tindex) = (index);\
+    (_nindex) = (ndarray)->offset;\
+    for(size_t _x=0; _x < (ndarray)->ndim; _x++) {\
+        Q = (_tindex) / (shape_strides)[_x];\
+        (_tindex) -= Q * (shape_strides)[_x];\
+        (_nindex) += Q * (stride_array)[_x];\
+    }\
+} while(0)
+
+
 #define RUN_BINARY_LOOP(typecode, type_out, type_left, type_right, ol, or, op) do {\
+    uint8_t inc = 0;\
+    inc++;\
 } while(0)
 
 /*
