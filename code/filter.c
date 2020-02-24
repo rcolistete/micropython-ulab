@@ -17,6 +17,15 @@
 #include "py/misc.h"
 #include "filter.h"
 
+// speed test code, can be removed later
+#define GET_FLOAT_VALUE(type, in, out, index) do {\
+    if((type) == NDARRAY_UINT8) (out) = (mp_float_t)(((uint8_t *)(in))[(index)]);\
+    else if((type) == NDARRAY_INT8) (out) = (mp_float_t)(((int8_t *)(in))[(index)]);\
+    else if((type) == NDARRAY_UINT16) (out) = (mp_float_t)(((uint16_t *)(in))[(index)]);\
+    else if((type) == NDARRAY_INT16) (out) = (mp_float_t)(((int16_t *)(in))[(index)]);\
+    else (out) = (mp_float_t)(((mp_float_t *)(in))[(index)]);\
+} while(0)
+
 #if ULAB_FILTER_MODULE
 mp_obj_t filter_convolve(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
     static const mp_arg_t allowed_args[] = {
@@ -64,6 +73,8 @@ mp_obj_t filter_convolve(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_a
             *outptr++ = accum;
         }
     } else {
+        void *a_inarray = a->array->items;
+        void *c_inarray = c->array->items;
         for(int k=-off; k<len-off; k++) {
             mp_float_t accum = (mp_float_t)0;
             int top_n = MIN(len_c, len_a - k);
@@ -71,14 +82,16 @@ mp_obj_t filter_convolve(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_a
             for(int n=bot_n; n<top_n; n++) {
                 int idx_c = len_c - n - 1;
                 int idx_a = n+k;
-                mp_float_t ai = ndarray_get_float_value(a->array->items, a->array->typecode, idx_a);
-                mp_float_t ci = ndarray_get_float_value(c->array->items, c->array->typecode, idx_c);
+//                mp_float_t ai = ndarray_get_float_value(a->array->items, a->array->typecode, idx_a);
+//                mp_float_t ci = ndarray_get_float_value(c->array->items, c->array->typecode, idx_c);
+                mp_float_t ai, ci;
+                GET_FLOAT_VALUE(a->array->typecode, a_inarray, ai, idx_a);
+                GET_FLOAT_VALUE(c->array->typecode, c_inarray, ci, idx_c);
                 accum += ai * ci;
             }
             *outptr++ = accum;
         }
     }
-
     return out;
 }
 
