@@ -365,18 +365,139 @@ mp_obj_t ndarray_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw,
 }
 #endif
 
-#if 0
-mp_obj_t ndarray_get_slice(ndarray_obj_t *ndarray, mp_obj_t index, ndarray_obj_t *values) {
-    // return 1 for now
-    return mp_obj_new_int(1);
+mp_bound_slice_t generate_slice(mp_uint_t n, mp_obj_t index) {
+    // micropython seems to have difficulties with negative steps
+    mp_bound_slice_t slice;
+    if(MP_OBJ_IS_TYPE(index, &mp_type_slice)) {
+        mp_seq_get_fast_slice_indexes(n, index, &slice);
+    } else if(mp_obj_is_int(index)) {
+        int32_t _index = mp_obj_get_int(index);
+        if(_index < 0) {
+            _index += n;
+        } 
+        if((_index >= n) || (_index < 0)) {
+            mp_raise_msg(&mp_type_IndexError, "index is out of bounds");
+        }
+        slice.start = _index;
+        slice.stop = _index + 1;
+        slice.step = 1;
+    } else {
+        mp_raise_msg(&mp_type_IndexError, "indices must be integers, slices, or Boolean lists");
+    }
+    return slice;
+}
+
+size_t slice_length(mp_bound_slice_t slice) {
+    int32_t len, correction = 1;
+    if(slice.step > 0) correction = -1;
+    len = (slice.stop - slice.start + (slice.step + correction)) / slice.step;
+    if(len < 0) return 0;
+    return (size_t)len;
+}
+
+ndarray_obj_t *ndarray_new_view_from_tuple(ndarray_obj_t *ndarray, mp_obj_tuple_t *slices) {
+    mp_bound_slice_t slice;
+    size_t *shape_array = m_new(size_t, ndarray->ndim);
+    int32_t *strides_array = m_new(int32_t, ndarray->ndim);
+    size_t offset = ndarray->offset;
+    for(uint8_t i=0; i < ndarray->ndim; i++) {
+        if(i < slices->len) {
+            slice = generate_slice(ndarray->shape[i], slices->items[i]);
+            offset += ndarray->offset + slice.start * ndarray->strides[i];
+            shape_array[i] = slice_length(slice);
+            strides_array[i] = ndarray->strides[i] * slice.step;
+        } else {
+            shape_array[i] = ndarray->shape[i];
+            strides_array[i] = ndarray->strides[i]; 
+        }
+    }
+    return ndarray_new_view(ndarray->array, ndarray->ndim, shape_array, strides_array, offset, ndarray->boolean);
+}
+    
+bool ndarray_check_compatibility(ndarray_obj_t *lhs, ndarray_obj_t *rhs) {
+    if(rhs->ndim > lhs->ndim) {
+        return false;
+    } 
+    for(uint8_t i=0; i < rhs->ndim; i++) {
+        if((rhs->shape[rhs->ndim-1-i] != 1) && (rhs->shape[rhs->ndim-1-i] != lhs->shape[lhs->ndim-1-i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+mp_obj_t ndarray_assign_view_from_tuple(ndarray_obj_t *ndarray, mp_obj_tuple_t *slices, mp_obj_t value) {
+    ndarray_obj_t *lhs = ndarray_new_view_from_tuple(ndarray, slices);
+    ndarray_obj_t *rhs;
+    if(MP_OBJ_IS_TYPE(value, &ulab_ndarray_type)) {
+        rhs = MP_OBJ_TO_PTR(value);
+        // since this is an assignment, the left hand side should definitely be able to contain the right hand side
+        if(!ndarray_check_compatibility(lhs, rhs)) {
+            mp_raise_ValueError("could not broadcast input array into output array");
+        }
+    } else { // we have a scalar, so create an ndarray for it
+        size_t *shape = m_new(size_t, lhs->ndim*sizeof(size_t));
+        for(uint8_t i=0; i < lhs->ndim; i++) {
+            shape[i] = 1;
+        }
+        rhs = ndarray_new_dense_ndarray(lhs->ndim, shape, lhs->array->typecode);
+        mp_binary_set_val_array(rhs->array->typecode, rhs->array->items, 0, value);
+    }
+    size_t roffset = rhs->offset;
+    size_t loffset = lhs->offset;
+    size_t *lcoords = ndarray_new_coords(lhs->ndim);
+    mp_obj_t item;
+    uint8_t diff_ndim = lhs->ndim - rhs->ndim;
+    for(size_t i=0; i < lhs->len; i++) {
+        item = mp_binary_get_val_array(rhs->array->typecode, rhs->array->items, roffset);
+        mp_binary_set_val_array(lhs->array->typecode, lhs->array->items, loffset, item);
+        for(uint8_t j=lhs->ndim-1; j > 0; j--) {
+            loffset += lhs->strides[j];
+            lcoords[j] += 1;
+            if(j >= diff_ndim) {
+                if(rhs->shape[j-diff_ndim] != 1) {
+                    roffset += rhs->strides[j-diff_ndim];
+                }
+            }
+            if(lcoords[j] == lhs->shape[j]) { // we are at a dimension boundary
+                if(j > diff_ndim) { // this means right-hand-side coordinates that haven't been prepended
+                    if(rhs->shape[j-diff_ndim] != 1) {
+                        // if rhs->shape[j-diff_ndim] != 1, then rhs->shape[j-diff_ndim] == lhs->shape[j],
+                        // so we can advance the offset counter
+                        roffset -= rhs->shape[j-diff_ndim] * rhs->strides[j-diff_ndim];
+                        roffset += rhs->strides[j-diff_ndim-1];
+                    } else { // rhs->shape[j-diff_ndim] == 1
+                        roffset -= rhs->strides[j-diff_ndim];
+                    }
+                } else {
+                    roffset = rhs->offset;
+                }
+                loffset -= lhs->shape[j] * lhs->strides[j];
+                loffset += lhs->strides[j-1];
+                lcoords[j] = 0;
+                lcoords[j-1] += 1;
+            } else { // coordinates can change only, if the last coordinate changes
+                break;
+            }
+        }
+    }
+    m_del(size_t, lcoords, lhs->ndim);
+    return mp_const_none;
 }
 
 mp_obj_t ndarray_subscr(mp_obj_t self_in, mp_obj_t index, mp_obj_t value) {
     ndarray_obj_t *self = MP_OBJ_TO_PTR(self_in);
     
     if (value == MP_OBJ_SENTINEL) { // return value(s)
-        return ndarray_get_slice(self, index, NULL);
+        if(mp_obj_is_int(index) || MP_OBJ_IS_TYPE(index, &mp_type_slice)) {
+            mp_obj_t *items = m_new(mp_obj_t, 1);
+            items[0] = index;
+            mp_obj_t tuple = mp_obj_new_tuple(1, items);
+            return ndarray_new_view_from_tuple(self, tuple);
+        }                          
     } else { // assignment to slices; the value must be an ndarray, or a scalar
+        return mp_const_none;
+        #if 0
         if(!MP_OBJ_IS_TYPE(value, &ulab_ndarray_type) && 
           !MP_OBJ_IS_INT(value) && !mp_obj_is_float(value)) {
             mp_raise_ValueError(translate("right hand side must be an ndarray, or a scalar"));
@@ -393,12 +514,10 @@ mp_obj_t ndarray_subscr(mp_obj_t self_in, mp_obj_t index, mp_obj_t value) {
             }
             return ndarray_get_slice(self, index, values);
         }
-    }      
+        #endif
+    }
     return mp_const_none;
 }
-
-#endif
-
 
 // itarray iterator
 // the iterator works in the general n-dimensional case
@@ -443,16 +562,28 @@ mp_obj_t mp_obj_new_ndarray_iterator(mp_obj_t ndarray, size_t cur, mp_obj_iter_b
     return MP_OBJ_FROM_PTR(o);
 }
 
-
-bool can_broadcast(ndarray_obj_t *lhs, ndarray_obj_t *rhs) {
-    // returns true, if arrays can be broadcast together, false otherwise
-    // at the moment, it checks strict shape compatibility
-    for(uint8_t i=0; i < lhs->ndim; i++) {
-        if(lhs->shape[i] != rhs->shape[i]) {
-            return mp_const_false;
+size_t *can_broadcast(ndarray_obj_t *lhs, ndarray_obj_t *rhs) {
+    // returns the NULL, if arrays cannot be broadcast together, 
+    // the new shape array otherwise
+    uint8_t ndim = MAX(lhs->ndim, rhs->ndim);
+    uint8_t diff = lhs->ndim > rhs->ndim ? lhs->ndim - rhs->ndim : rhs->ndim - lhs->ndim;
+    
+    size_t *shape = m_new(size_t, ndim);
+    for(uint8_t i=0; i < ndim; i++) {
+        shape[i] = 1;
+    }
+    
+    for(uint8_t i=0; i < ndim-diff; i++) {
+        if((lhs->shape[lhs->ndim-i-1] == rhs->shape[rhs->ndim-i-1]) ||
+           (lhs->shape[lhs->ndim-i-1] == 1) || (rhs->shape[rhs->ndim-i-1] == 1)) {
+            shape[ndim-i-1] = lhs->shape[lhs->ndim-i-1] > rhs->shape[rhs->ndim-i-1] ? lhs->shape[lhs->ndim-i-1] : rhs->shape[rhs->ndim-i-1];
+        } else {
+            m_del(size_t, shape, ndim);
+            shape = NULL;
+            break;
         }
     }
-    return true;
+    return shape;
 }
 
 #define GET_FLOAT_VALUE(type, in, out) do {\
@@ -709,7 +840,6 @@ mp_obj_t ndarray_unary_op(mp_unary_op_t op, mp_obj_t self_in) {
     }
 }
 
-
 mp_obj_t ndarray_shape(mp_obj_t self_in) {
     ndarray_obj_t *self = MP_OBJ_TO_PTR(self_in);
     mp_obj_t *items = m_new(mp_obj_t, self->ndim);
@@ -721,6 +851,8 @@ mp_obj_t ndarray_shape(mp_obj_t self_in) {
     m_del(mp_obj_t, items, self->ndim);
     return tuple;
 }
+
+MP_DEFINE_CONST_FUN_OBJ_1(ndarray_shape_obj, ndarray_shape);
 
 mp_obj_t ndarray_strides(mp_obj_t self_in) {
     ndarray_obj_t *self = MP_OBJ_TO_PTR(self_in);
