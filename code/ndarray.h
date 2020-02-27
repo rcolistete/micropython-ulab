@@ -47,15 +47,13 @@ enum NDARRAY_TYPE {
 
 typedef struct _ndarray_obj_t {
     mp_obj_base_t base;
+    uint8_t typecode;
     uint8_t boolean;
     uint8_t ndim;
     size_t *shape;
     int32_t *strides;
-    // we could, perhaps, get rid of this, since len can always be calculated from the shape
     size_t len;
-    // we could move the pointer in *array, in which case, offset can be removed
-    size_t offset;
-    mp_obj_array_t *array;
+    void *array;
 } ndarray_obj_t;
 
 mp_obj_t mp_obj_new_ndarray_iterator(mp_obj_t , size_t , mp_obj_iter_buf_t *);
@@ -64,7 +62,7 @@ mp_float_t ndarray_get_float_value(void *, uint8_t , size_t );
 void fill_array_iterable(mp_float_t *, mp_obj_t );
 
 void ndarray_print(const mp_print_t *, mp_obj_t , mp_print_kind_t );
-void ndarray_assign_elements(mp_obj_array_t *, mp_obj_t , uint8_t , size_t *);
+void ndarray_assign_elements(void *, mp_obj_t , uint8_t , size_t *);
 ndarray_obj_t *create_new_ndarray(size_t , size_t , uint8_t );
 ndarray_obj_t *ndarray_new_dense_ndarray(uint8_t , size_t *, uint8_t );
 ndarray_obj_t *ndarray_new_ndarray(uint8_t , size_t *, int32_t *, uint8_t );

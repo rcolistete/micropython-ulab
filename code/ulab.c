@@ -51,11 +51,11 @@ const mp_obj_type_t ulab_ndarray_type = {
     .name = MP_QSTR_ndarray,
     .print = ndarray_print,
     .make_new = ndarray_make_new,
-    .subscr = ndarray_subscr,
+//    .subscr = ndarray_subscr,
     .getiter = ndarray_getiter,
     .unary_op = ndarray_unary_op,
 //    .binary_op = ndarray_binary_op,
-    .buffer_p = { .get_buffer = ndarray_get_buffer, },
+//    .buffer_p = { .get_buffer = ndarray_get_buffer, },
     .locals_dict = (mp_obj_dict_t*)&ulab_ndarray_locals_dict,
 };
 
