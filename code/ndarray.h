@@ -20,9 +20,9 @@
 #define PRINT_MAX  10
 
 #if MICROPY_FLOAT_IMPL == MICROPY_FLOAT_IMPL_FLOAT
-#define FLOAT_TYPECODE 'f'
+#define FLOAT_dtype 'f'
 #elif MICROPY_FLOAT_IMPL == MICROPY_FLOAT_IMPL_DOUBLE
-#define FLOAT_TYPECODE 'd'
+#define FLOAT_dtype 'd'
 #endif
 
 #if !CIRCUITPY
@@ -37,17 +37,17 @@
 extern const mp_obj_type_t ulab_ndarray_type;
 
 enum NDARRAY_TYPE {
-    NDARRAY_BOOL = '?', // this must never be assigned to the typecode!
+    NDARRAY_BOOL = '?', // this must never be assigned to the dtype!
     NDARRAY_UINT8 = 'B',
     NDARRAY_INT8 = 'b',
     NDARRAY_UINT16 = 'H', 
     NDARRAY_INT16 = 'h',
-    NDARRAY_FLOAT = FLOAT_TYPECODE,
+    NDARRAY_FLOAT = FLOAT_dtype,
 };
 
 typedef struct _ndarray_obj_t {
     mp_obj_base_t base;
-    uint8_t typecode;
+    uint8_t dtype;
     uint8_t boolean;
     uint8_t ndim;
     size_t *shape;
@@ -63,8 +63,8 @@ void fill_array_iterable(mp_float_t *, mp_obj_t );
 
 void ndarray_print(const mp_print_t *, mp_obj_t , mp_print_kind_t );
 void ndarray_assign_elements(void *, mp_obj_t , uint8_t , size_t *);
-ndarray_obj_t *create_new_ndarray(size_t , size_t , uint8_t );
 ndarray_obj_t *ndarray_new_dense_ndarray(uint8_t , size_t *, uint8_t );
+ndarray_obj_t *ndarray_new_ndarray_from_tuple(mp_obj_tuple_t *, uint8_t );
 ndarray_obj_t *ndarray_new_ndarray(uint8_t , size_t *, int32_t *, uint8_t );
 ndarray_obj_t *ndarray_new_linear_array(size_t , uint8_t );
 
@@ -84,6 +84,8 @@ MP_DECLARE_CONST_FUN_OBJ_1(ndarray_shape_obj);
 
 mp_obj_t ndarray_size(mp_obj_t );
 mp_obj_t ndarray_itemsize(mp_obj_t );
+MP_DECLARE_CONST_FUN_OBJ_1(ndarray_itemsize_obj);
+
 mp_obj_t ndarray_ndim(mp_obj_t );
 mp_obj_t ndarray_flatten(size_t , const mp_obj_t *, mp_map_t *);
 
@@ -97,8 +99,8 @@ mp_int_t ndarray_get_buffer(mp_obj_t obj, mp_buffer_info_t *bufinfo, mp_uint_t f
 //void ndarray_attributes(mp_obj_t , qstr , mp_obj_t *);
 
 
-#define CREATE_SINGLE_ITEM(outarray, type, typecode, value) do {\
-    ndarray_obj_t *tmp = create_new_ndarray(1, 1, (typecode));\
+#define CREATE_SINGLE_ITEM(outarray, type, dtype, value) do {\
+    ndarray_obj_t *tmp = create_new_ndarray(1, 1, (dtype));\
     type *tmparr = (type *)tmp->array->items;\
     tmparr[0] = (type)(value);\
     (outarray) = MP_OBJ_FROM_PTR(tmp);\
@@ -123,19 +125,19 @@ mp_int_t ndarray_get_buffer(mp_obj_t obj, mp_buffer_info_t *bufinfo, mp_uint_t f
 } while(0)
 
 
-#define RUN_BINARY_LOOP(typecode, type_out, type_left, type_right, ol, or, op) do {\
+#define RUN_BINARY_LOOP(dtype, type_out, type_left, type_right, ol, or, op) do {\
     uint8_t inc = 0;\
     inc++;\
 } while(0)
 
 /*
-#define RUN_BINARY_LOOP(typecode, type_out, type_left, type_right, ol, or, op) do {\
+#define RUN_BINARY_LOOP(dtype, type_out, type_left, type_right, ol, or, op) do {\
     type_left *left = (type_left *)(ol)->array->items;\
     type_right *right = (type_right *)(or)->array->items;\
     uint8_t inc = 0;\
     if((or)->array->len > 1) inc = 1;\
     if(((op) == MP_BINARY_OP_ADD) || ((op) == MP_BINARY_OP_SUBTRACT) || ((op) == MP_BINARY_OP_MULTIPLY)) {\
-        ndarray_obj_t *out = create_new_ndarray(ol->m, ol->n, typecode);\
+        ndarray_obj_t *out = create_new_ndarray(ol->m, ol->n, dtype);\
         type_out *(odata) = (type_out *)out->array->items;\
         if((op) == MP_BINARY_OP_ADD) { for(size_t i=0, j=0; i < (ol)->array->len; i++, j+=inc) odata[i] = left[i] + right[j];}\
         if((op) == MP_BINARY_OP_SUBTRACT) { for(size_t i=0, j=0; i < (ol)->array->len; i++, j+=inc) odata[i] = left[i] - right[j];}\

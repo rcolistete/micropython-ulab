@@ -1,3 +1,20 @@
+Thu, 27 Feb 2020
+
+version 0.36.0
+
+	moved zeros, ones, eye and linspace into separate module (they are still bound at the top level)
+	
+Thu, 27 Feb 2020
+
+version 0.35.0
+
+    Move zeros, ones back into top level ulab module
+
+Tue, 18 Feb 2020
+
+version 0.34.0
+
+    split ulab into multiple modules
 
 Sun, 16 Feb 2020
 
@@ -16,6 +33,12 @@ Thu, 13 Feb 2020
 version 0.33.0
 
     sub-modules are now proper sub-modules of ulab
+
+Mon, 17 Feb 2020
+
+version 0.32.1
+
+    temporary fix for issue #40
     
 Tue, 11 Feb 2020
 

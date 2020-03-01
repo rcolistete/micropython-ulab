@@ -39,13 +39,13 @@ mp_obj_t vectorise_generic_vector(mp_obj_t o_in, mp_float_t (*f)(mp_float_t)) {
 //        if(len == source->len) { // this is a dense array
             ndarray = ndarray_new_dense_ndarray(source->ndim, source->shape, NDARRAY_FLOAT);
             mp_float_t *dataout = (mp_float_t *)ndarray->array;
-            if(source->typecode == NDARRAY_UINT8) {
+            if(source->dtype == NDARRAY_UINT8) {
                 ITERATE_VECTOR(uint8_t, source, dataout);
-            } else if(source->typecode == NDARRAY_INT8) {
+            } else if(source->dtype == NDARRAY_INT8) {
                 ITERATE_VECTOR(int8_t, source, dataout);
-            } else if(source->typecode == NDARRAY_UINT16) {
+            } else if(source->dtype == NDARRAY_UINT16) {
                 ITERATE_VECTOR(uint16_t, source, dataout);
-            } else if(source->typecode == NDARRAY_INT16) {
+            } else if(source->dtype == NDARRAY_INT16) {
                 ITERATE_VECTOR(int16_t, source, dataout);
             } else {
                 ITERATE_VECTOR(mp_float_t, source, dataout);
@@ -58,13 +58,13 @@ mp_obj_t vectorise_generic_vector(mp_obj_t o_in, mp_float_t (*f)(mp_float_t)) {
             }
             ndarray = ndarray_new_ndarray(source->ndim, source->shape, shape_strides, NDARRAY_FLOAT);
             mp_float_t *dataout = (mp_float_t *)ndarray->array;
-            if(source->typecode == NDARRAY_UINT8) {
+            if(source->dtype == NDARRAY_UINT8) {
                 ITERATE_VECTOR_SLICE(uint8_t, source, dataout, source->strides, shape_strides);
-            } else if(source->typecode == NDARRAY_INT8) {
+            } else if(source->dtype == NDARRAY_INT8) {
                 ITERATE_VECTOR_SLICE(int8_t, source, dataout, source->strides, shape_strides);
-            } else if(source->typecode == NDARRAY_UINT16) {
+            } else if(source->dtype == NDARRAY_UINT16) {
                 ITERATE_VECTOR_SLICE(uint16_t, source, dataout, source->strides, shape_strides);
-            } else if(source->typecode == NDARRAY_INT16) {
+            } else if(source->dtype == NDARRAY_INT16) {
                 ITERATE_VECTOR_SLICE(int16_t, source, dataout, source->strides, shape_strides);
             } else {
                 ITERATE_VECTOR_SLICE(float, source, dataout, source->strides, shape_strides);                

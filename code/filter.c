@@ -48,7 +48,7 @@ mp_obj_t filter_convolve(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_a
     mp_float_t *outptr = out->array->items;
     int off = len_c-1;
 
-    if(a->array->typecode == NDARRAY_FLOAT && c->array->typecode == NDARRAY_FLOAT) {
+    if(a->array->dtype == NDARRAY_FLOAT && c->array->dtype == NDARRAY_FLOAT) {
         mp_float_t* a_items = (mp_float_t*)a->array->items;
         mp_float_t* c_items = (mp_float_t*)c->array->items;
         for(int k=-off; k<len-off; k++) {
@@ -71,8 +71,8 @@ mp_obj_t filter_convolve(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_a
             for(int n=bot_n; n<top_n; n++) {
                 int idx_c = len_c - n - 1;
                 int idx_a = n+k;
-                mp_float_t ai = ndarray_get_float_value(a->array->items, a->array->typecode, idx_a);
-                mp_float_t ci = ndarray_get_float_value(c->array->items, c->array->typecode, idx_c);
+                mp_float_t ai = ndarray_get_float_value(a->array->items, a->array->dtype, idx_a);
+                mp_float_t ci = ndarray_get_float_value(c->array->items, c->array->dtype, idx_c);
                 accum += ai * ci;
             }
             *outptr++ = accum;

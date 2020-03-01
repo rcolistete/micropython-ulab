@@ -6,6 +6,7 @@
  *
  * The MIT License (MIT)
  *
+ * Copyright (c) 2020 Jeff Epler for Adafruit Industries
  * Copyright (c) 2019-2020 Zoltán Vörös
 */
 
@@ -20,35 +21,15 @@
 #include "ndarray.h"
 #include "ndarray_properties.h"
 
-/*
-// This function is copied verbatim from objarray.c
-STATIC mp_obj_array_t *array_new(char typecode, size_t n) {
-    int typecode_size = mp_binary_get_size('@', typecode, NULL);
-    mp_obj_array_t *o = m_new_obj(mp_obj_array_t);
-    // this step could probably be skipped: we are never going to store a bytearray per se
-    #if MICROPY_PY_BUILTINS_BYTEARRAY && MICROPY_PY_ARRAY
-    o->base.type = (typecode == BYTEARRAY_TYPECODE) ? &mp_type_bytearray : &mp_type_array;
-    #elif MICROPY_PY_BUILTINS_BYTEARRAY
-    o->base.type = &mp_type_bytearray;
-    #else
-    o->base.type = &mp_type_array;
-    #endif
-    o->typecode = typecode;
-    o->free = 0;
-    o->len = n;
-    o->items = m_new(byte, typecode_size * o->len);
-    return o;
-}
-*/
 
-mp_float_t ndarray_get_float_value(void *data, uint8_t typecode, size_t index) {
-    if(typecode == NDARRAY_UINT8) {
+mp_float_t ndarray_get_float_value(void *data, uint8_t dtype, size_t index) {
+    if(dtype == NDARRAY_UINT8) {
         return (mp_float_t)((uint8_t *)data)[index];
-    } else if(typecode == NDARRAY_INT8) {
+    } else if(dtype == NDARRAY_INT8) {
         return (mp_float_t)((int8_t *)data)[index];
-    } else if(typecode == NDARRAY_UINT16) {
+    } else if(dtype == NDARRAY_UINT16) {
         return (mp_float_t)((uint16_t *)data)[index];
-    } else if(typecode == NDARRAY_INT16) {
+    } else if(dtype == NDARRAY_INT16) {
         return (mp_float_t)((int16_t *)data)[index];
     } else {
         return (mp_float_t)((mp_float_t *)data)[index];
@@ -98,7 +79,7 @@ void ndarray_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t ki
         }
         print_extra = 0;
         if(!self->boolean) {
-            mp_obj_print_helper(print, mp_binary_get_val_array(self->typecode, array, offset), PRINT_REPR);
+            mp_obj_print_helper(print, mp_binary_get_val_array(self->dtype, array, offset), PRINT_REPR);
         } else {
             if(((uint8_t *)array)[offset]) {
                 mp_print_str(print, "True");
@@ -135,38 +116,38 @@ void ndarray_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t ki
 
     if(self->boolean) {
         mp_print_str(print, ", dtype=bool)");
-    } else if(self->typecode == NDARRAY_UINT8) {
+    } else if(self->dtype == NDARRAY_UINT8) {
         mp_print_str(print, ", dtype=uint8)");
-    } else if(self->typecode == NDARRAY_INT8) {
+    } else if(self->dtype == NDARRAY_INT8) {
         mp_print_str(print, ", dtype=int8)");
-    } else if(self->typecode == NDARRAY_UINT16) {
+    } else if(self->dtype == NDARRAY_UINT16) {
         mp_print_str(print, ", dtype=uint16)");
-    } else if(self->typecode == NDARRAY_INT16) {
+    } else if(self->dtype == NDARRAY_INT16) {
         mp_print_str(print, ", dtype=int16)");
-    } else if(self->typecode == NDARRAY_FLOAT) {
+    } else if(self->dtype == NDARRAY_FLOAT) {
         mp_print_str(print, ", dtype=float)");
     }
 }
 
-void ndarray_assign_elements(void *data, mp_obj_t iterable, uint8_t typecode, size_t *idx) {
+void ndarray_assign_elements(void *data, mp_obj_t iterable, uint8_t dtype, size_t *idx) {
     // assigns a single row in the matrix
     mp_obj_t item;
     while ((item = mp_iternext(iterable)) != MP_OBJ_STOP_ITERATION) {
-        mp_binary_set_val_array(typecode, data, (*idx)++, item);
+        mp_binary_set_val_array(dtype, data, (*idx)++, item);
     }
 }
 
-ndarray_obj_t *ndarray_new_ndarray(uint8_t ndim, size_t *shape, int32_t *strides, uint8_t typecode) {
+ndarray_obj_t *ndarray_new_ndarray(uint8_t ndim, size_t *shape, int32_t *strides, uint8_t dtype) {
     // Creates the base ndarray with shape, and initialises the values to straight 0s
     // the function should work in the general n-dimensional case
     ndarray_obj_t *ndarray = m_new_obj(ndarray_obj_t);
     ndarray->base.type = &ulab_ndarray_type;
-    ndarray->typecode = typecode;
+    ndarray->dtype = dtype;
     ndarray->ndim = ndim;
     ndarray->shape = shape;
     ndarray->strides = strides;
-    if(typecode == NDARRAY_BOOL) {
-        typecode = NDARRAY_UINT8;
+    if(dtype == NDARRAY_BOOL) {
+        dtype = NDARRAY_UINT8;
         ndarray->boolean = NDARRAY_BOOLEAN;
     } else {
         ndarray->boolean = NDARRAY_NUMERIC;
@@ -175,16 +156,16 @@ ndarray_obj_t *ndarray_new_ndarray(uint8_t ndim, size_t *shape, int32_t *strides
     for(uint8_t i=0; i < ndim; i++) {
         ndarray->len *= shape[i];
     }
-	uint8_t itemsize = mp_binary_get_size('@', typecode, NULL);
+	uint8_t itemsize = mp_binary_get_size('@', dtype, NULL);
 	uint8_t *array = m_new(byte, itemsize*ndarray->len);
-    // this should set all elements to 0, irrespective of the of the typecode (all bits are zero)
+    // this should set all elements to 0, irrespective of the of the dtype (all bits are zero)
     // we could, perhaps, leave this step out, and initialise the array only, when needed
     memset(array, 0, ndarray->len*itemsize);
     ndarray->array = array;
     return ndarray;
 }
 
-ndarray_obj_t *ndarray_new_dense_ndarray(uint8_t ndim, size_t *shape, uint8_t typecode) {
+ndarray_obj_t *ndarray_new_dense_ndarray(uint8_t ndim, size_t *shape, uint8_t dtype) {
     // creates a dense array, i.e., one, where the strides are derived directly from the shapes
     // the function should work in the general n-dimensional case
     int32_t *strides = m_new(int32_t, ndim);
@@ -192,23 +173,35 @@ ndarray_obj_t *ndarray_new_dense_ndarray(uint8_t ndim, size_t *shape, uint8_t ty
     for(size_t i=ndim-1; i > 0; i--) {
         strides[i-1] = strides[i] * shape[i-1];
     }
-    return ndarray_new_ndarray(ndim, shape, strides, typecode);
+    return ndarray_new_ndarray(ndim, shape, strides, dtype);
 }
 
-ndarray_obj_t *ndarray_new_view(void *array, uint8_t ndim, size_t *shape, int32_t *strides, uint8_t boolean) {
+ndarray_obj_t *ndarray_new_ndarray_from_tuple(mp_obj_tuple_t *_shape, uint8_t dtype) {
+    // creates a dense array from a tuple
+    // the function should work in the general n-dimensional case
+    uint8_t ndim = _shape->len;
+    size_t *shape = m_new(size_t, ndim);
+    for(size_t i=0; i < ndim; i++) {
+		shape[i] = mp_obj_get_int(_shape->items[i]);
+    }
+    return ndarray_new_dense_ndarray(ndim, shape, dtype);
+}
+
+ndarray_obj_t *ndarray_new_view(ndarray_obj_t *ndarray_in, uint8_t ndim, size_t *shape, int32_t *strides) {
     // creates a new view from the input arguments
     // the function should work in the n-dimensional case
     ndarray_obj_t *ndarray = m_new_obj(ndarray_obj_t);
     ndarray->base.type = &ulab_ndarray_type;
-    ndarray->boolean = boolean;
+    ndarray->boolean = ndarray_in->boolean;
+    ndarray->dtype = ndarray_in->dtype;
     ndarray->ndim = ndim;
     ndarray->shape = shape;
     ndarray->strides = strides;
     ndarray->len = 1;
     for(uint8_t i=0; i < ndim; i++) {
         ndarray->len *= shape[i];
-    }    
-    ndarray->array = array;
+    }
+    ndarray->array = ndarray_in->array;
     return ndarray;
 }
 
@@ -219,15 +212,15 @@ ndarray_obj_t *ndarray_copy_view(ndarray_obj_t *source) {
     // instead of reading out the values
     int32_t *strides = strides_from_shape(source->shape, source->ndim);
 
-    uint8_t typecode = source->typecode;
+    uint8_t dtype = source->dtype;
     if(source->boolean) {
-        typecode = NDARRAY_BOOLEAN;
+        dtype = NDARRAY_BOOLEAN;
     }
-    ndarray_obj_t *ndarray = ndarray_new_ndarray(source->ndim, source->shape, strides, typecode);
+    ndarray_obj_t *ndarray = ndarray_new_ndarray(source->ndim, source->shape, strides, dtype);
 
     size_t *coords = ndarray_new_coords(source->ndim);
     int32_t last_stride = source->strides[source->ndim-1];
-    uint8_t itemsize = mp_binary_get_size('@', source->typecode, NULL);
+    uint8_t itemsize = mp_binary_get_size('@', source->dtype, NULL);
 
     uint8_t *array = (uint8_t *)source->array;
     uint8_t *new_array = (uint8_t *)ndarray->array;
@@ -414,7 +407,7 @@ ndarray_obj_t *ndarray_new_view_from_tuple(ndarray_obj_t *ndarray, mp_obj_tuple_
             strides_array[i] = ndarray->strides[i]; 
         }
     }
-    return ndarray_new_view(ndarray->array, ndarray->ndim, shape_array, strides_array, offset, ndarray->boolean);
+    return ndarray_new_view(ndarray, ndarray->ndim, shape_array, strides_array, offset);
 }
     
 bool ndarray_check_compatibility(ndarray_obj_t *lhs, ndarray_obj_t *rhs) {
@@ -443,8 +436,8 @@ mp_obj_t ndarray_assign_view_from_tuple(ndarray_obj_t *ndarray, mp_obj_tuple_t *
         for(uint8_t i=0; i < lhs->ndim; i++) {
             shape[i] = 1;
         }
-        rhs = ndarray_new_dense_ndarray(lhs->ndim, shape, lhs->array->typecode);
-        mp_binary_set_val_array(rhs->array->typecode, rhs->array->items, 0, value);
+        rhs = ndarray_new_dense_ndarray(lhs->ndim, shape, lhs->array->dtype);
+        mp_binary_set_val_array(rhs->array->dtype, rhs->array->items, 0, value);
     }
     size_t roffset = rhs->offset;
     size_t loffset = lhs->offset;
@@ -452,8 +445,8 @@ mp_obj_t ndarray_assign_view_from_tuple(ndarray_obj_t *ndarray, mp_obj_tuple_t *
     mp_obj_t item;
     uint8_t diff_ndim = lhs->ndim - rhs->ndim;
     for(size_t i=0; i < lhs->len; i++) {
-        item = mp_binary_get_val_array(rhs->array->typecode, rhs->array->items, roffset);
-        mp_binary_set_val_array(lhs->array->typecode, lhs->array->items, loffset, item);
+        item = mp_binary_get_val_array(rhs->array->dtype, rhs->array->items, roffset);
+        mp_binary_set_val_array(lhs->array->dtype, lhs->array->items, loffset, item);
         for(uint8_t j=lhs->ndim-1; j > 0; j--) {
             loffset += lhs->strides[j];
             lcoords[j] += 1;
@@ -507,8 +500,8 @@ mp_obj_t ndarray_subscr(mp_obj_t self_in, mp_obj_t index, mp_obj_t value) {
         } else {
             ndarray_obj_t *values = NULL;
             if(MP_OBJ_IS_INT(value)) {
-                values = create_new_ndarray(1, 1, self->array->typecode);
-                mp_binary_set_val_array(values->array->typecode, values->array->items, 0, value);   
+                values = create_new_ndarray(1, 1, self->array->dtype);
+                mp_binary_set_val_array(values->array->dtype, values->array->items, 0, value);   
             } else if(mp_obj_is_float(value)) {
                 values = create_new_ndarray(1, 1, NDARRAY_FLOAT);
                 mp_binary_set_val_array(NDARRAY_FLOAT, values->array->items, 0, value);
@@ -544,10 +537,10 @@ mp_obj_t ndarray_iternext(mp_obj_t self_in) {
         if(ndarray->ndim == 1) { // we have a linear array
             // read the current value
             self->cur++;
-            return mp_binary_get_val_array(ndarray->typecode, ndarray->array, self->cur-1);
+            return mp_binary_get_val_array(ndarray->dtype, ndarray->array, self->cur-1);
         } else { // we have a tensor, return the reduced view
             //size_t offset = ndarray->offset + self->cur * ndarray->strides[0];
-            ndarray_obj_t *value = ndarray_new_view(ndarray->array, ndarray->ndim-1, ndarray->shape+1, ndarray->strides+1, ndarray->boolean);
+            ndarray_obj_t *value = ndarray_new_view(ndarray, ndarray->ndim-1, ndarray->shape+1, ndarray->strides+1);
             self->cur++;
             return MP_OBJ_FROM_PTR(value);
         }
@@ -664,65 +657,65 @@ mp_obj_t ndarray_binary_op_helper(mp_binary_op_t op, mp_obj_t _lhs, mp_obj_t _rh
                 // float always becomes float
                 // operation on identical types preserves type
                 // The parameters of RUN_BINARY_LOOP are 
-                // typecode of result, type_out, type_left, type_right, lhs operand, rhs operand, operator
-                if(lhs->array->typecode == NDARRAY_UINT8) {
-                    if(rhs->array->typecode == NDARRAY_UINT8) {
+                // dtype of result, type_out, type_left, type_right, lhs operand, rhs operand, operator
+                if(lhs->array->dtype == NDARRAY_UINT8) {
+                    if(rhs->array->dtype == NDARRAY_UINT8) {
                         RUN_BINARY_LOOP(NDARRAY_UINT8, uint8_t, uint8_t, uint8_t, lhs, rhs, op);
-                    } else if(rhs->array->typecode == NDARRAY_INT8) {
+                    } else if(rhs->array->dtype == NDARRAY_INT8) {
                         RUN_BINARY_LOOP(NDARRAY_INT16, int16_t, uint8_t, int8_t, lhs, rhs, op);
-                    } else if(rhs->array->typecode == NDARRAY_UINT16) {
+                    } else if(rhs->array->dtype == NDARRAY_UINT16) {
                         RUN_BINARY_LOOP(NDARRAY_UINT16, uint16_t, uint8_t, uint16_t, lhs, rhs, op);
-                    } else if(rhs->array->typecode == NDARRAY_INT16) {
+                    } else if(rhs->array->dtype == NDARRAY_INT16) {
                         RUN_BINARY_LOOP(NDARRAY_INT16, int16_t, uint8_t, int16_t, lhs, rhs, op);
-                    } else if(rhs->array->typecode == NDARRAY_FLOAT) {
+                    } else if(rhs->array->dtype == NDARRAY_FLOAT) {
                         RUN_BINARY_LOOP(NDARRAY_FLOAT, mp_float_t, uint8_t, mp_float_t, lhs, rhs, op);
                     }
-                } else if(lhs->array->typecode == NDARRAY_INT8) {
-                    if(rhs->array->typecode == NDARRAY_UINT8) {
+                } else if(lhs->array->dtype == NDARRAY_INT8) {
+                    if(rhs->array->dtype == NDARRAY_UINT8) {
                         RUN_BINARY_LOOP(NDARRAY_INT16, int16_t, int8_t, uint8_t, lhs, rhs, op);
-                    } else if(rhs->array->typecode == NDARRAY_INT8) {
+                    } else if(rhs->array->dtype == NDARRAY_INT8) {
                         RUN_BINARY_LOOP(NDARRAY_INT8, int8_t, int8_t, int8_t, lhs, rhs, op);
-                    } else if(rhs->array->typecode == NDARRAY_UINT16) {
+                    } else if(rhs->array->dtype == NDARRAY_UINT16) {
                         RUN_BINARY_LOOP(NDARRAY_INT16, int16_t, int8_t, uint16_t, lhs, rhs, op);
-                    } else if(rhs->array->typecode == NDARRAY_INT16) {
+                    } else if(rhs->array->dtype == NDARRAY_INT16) {
                         RUN_BINARY_LOOP(NDARRAY_INT16, int16_t, int8_t, int16_t, lhs, rhs, op);
-                    } else if(rhs->array->typecode == NDARRAY_FLOAT) {
+                    } else if(rhs->array->dtype == NDARRAY_FLOAT) {
                         RUN_BINARY_LOOP(NDARRAY_FLOAT, mp_float_t, int8_t, mp_float_t, lhs, rhs, op);
                     }                
-                } else if(lhs->array->typecode == NDARRAY_UINT16) {
-                    if(rhs->array->typecode == NDARRAY_UINT8) {
+                } else if(lhs->array->dtype == NDARRAY_UINT16) {
+                    if(rhs->array->dtype == NDARRAY_UINT8) {
                         RUN_BINARY_LOOP(NDARRAY_UINT16, uint16_t, uint16_t, uint8_t, lhs, rhs, op);
-                    } else if(rhs->array->typecode == NDARRAY_INT8) {
+                    } else if(rhs->array->dtype == NDARRAY_INT8) {
                         RUN_BINARY_LOOP(NDARRAY_UINT16, uint16_t, uint16_t, int8_t, lhs, rhs, op);
-                    } else if(rhs->array->typecode == NDARRAY_UINT16) {
+                    } else if(rhs->array->dtype == NDARRAY_UINT16) {
                         RUN_BINARY_LOOP(NDARRAY_UINT16, uint16_t, uint16_t, uint16_t, lhs, rhs, op);
-                    } else if(rhs->array->typecode == NDARRAY_INT16) {
+                    } else if(rhs->array->dtype == NDARRAY_INT16) {
                         RUN_BINARY_LOOP(NDARRAY_FLOAT, mp_float_t, uint16_t, int16_t, lhs, rhs, op);
-                    } else if(rhs->array->typecode == NDARRAY_FLOAT) {
+                    } else if(rhs->array->dtype == NDARRAY_FLOAT) {
                         RUN_BINARY_LOOP(NDARRAY_FLOAT, mp_float_t, uint8_t, mp_float_t, lhs, rhs, op);
                     }
-                } else if(lhs->array->typecode == NDARRAY_INT16) {
-                    if(rhs->array->typecode == NDARRAY_UINT8) {
+                } else if(lhs->array->dtype == NDARRAY_INT16) {
+                    if(rhs->array->dtype == NDARRAY_UINT8) {
                         RUN_BINARY_LOOP(NDARRAY_INT16, int16_t, int16_t, uint8_t, lhs, rhs, op);
-                    } else if(rhs->array->typecode == NDARRAY_INT8) {
+                    } else if(rhs->array->dtype == NDARRAY_INT8) {
                         RUN_BINARY_LOOP(NDARRAY_INT16, int16_t, int16_t, int8_t, lhs, rhs, op);
-                    } else if(rhs->array->typecode == NDARRAY_UINT16) {
+                    } else if(rhs->array->dtype == NDARRAY_UINT16) {
                         RUN_BINARY_LOOP(NDARRAY_FLOAT, mp_float_t, int16_t, uint16_t, lhs, rhs, op);
-                    } else if(rhs->array->typecode == NDARRAY_INT16) {
+                    } else if(rhs->array->dtype == NDARRAY_INT16) {
                         RUN_BINARY_LOOP(NDARRAY_INT16, int16_t, int16_t, int16_t, lhs, rhs, op);
-                    } else if(rhs->array->typecode == NDARRAY_FLOAT) {
+                    } else if(rhs->array->dtype == NDARRAY_FLOAT) {
                         RUN_BINARY_LOOP(NDARRAY_FLOAT, mp_float_t, uint16_t, mp_float_t, lhs, rhs, op);
                     }
-                } else if(lhs->array->typecode == NDARRAY_FLOAT) {
-                    if(rhs->array->typecode == NDARRAY_UINT8) {
+                } else if(lhs->array->dtype == NDARRAY_FLOAT) {
+                    if(rhs->array->dtype == NDARRAY_UINT8) {
                         RUN_BINARY_LOOP(NDARRAY_FLOAT, mp_float_t, mp_float_t, uint8_t, lhs, rhs, op);
-                    } else if(rhs->array->typecode == NDARRAY_INT8) {
+                    } else if(rhs->array->dtype == NDARRAY_INT8) {
                         RUN_BINARY_LOOP(NDARRAY_FLOAT, mp_float_t, mp_float_t, int8_t, lhs, rhs, op);
-                    } else if(rhs->array->typecode == NDARRAY_UINT16) {
+                    } else if(rhs->array->dtype == NDARRAY_UINT16) {
                         RUN_BINARY_LOOP(NDARRAY_FLOAT, mp_float_t, mp_float_t, uint16_t, lhs, rhs, op);
-                    } else if(rhs->array->typecode == NDARRAY_INT16) {
+                    } else if(rhs->array->dtype == NDARRAY_INT16) {
                         RUN_BINARY_LOOP(NDARRAY_FLOAT, mp_float_t, mp_float_t, int16_t, lhs, rhs, op);
-                    } else if(rhs->array->typecode == NDARRAY_FLOAT) {
+                    } else if(rhs->array->dtype == NDARRAY_FLOAT) {
                         RUN_BINARY_LOOP(NDARRAY_FLOAT, mp_float_t, mp_float_t, mp_float_t, lhs, rhs, op);
                     }
                 } else { // this should never happen
@@ -749,7 +742,7 @@ mp_obj_t ndarray_binary_op(mp_binary_op_t op, mp_obj_t lhs, mp_obj_t rhs) {
 
 mp_obj_t ndarray_unary_op(mp_unary_op_t op, mp_obj_t self_in) {
     ndarray_obj_t *self = MP_OBJ_TO_PTR(self_in);
-    uint8_t itemsize = mp_binary_get_size('@', self->typecode, NULL);
+    uint8_t itemsize = mp_binary_get_size('@', self->dtype, NULL);
     ndarray_obj_t *ndarray = NULL;
     switch (op) {
         case MP_UNARY_OP_LEN: 
@@ -761,10 +754,10 @@ mp_obj_t ndarray_unary_op(mp_unary_op_t op, mp_obj_t self_in) {
             break;
         
         case MP_UNARY_OP_INVERT:
-            if(self->typecode == NDARRAY_FLOAT) {
+            if(self->dtype == NDARRAY_FLOAT) {
                 mp_raise_ValueError(translate("operation is not supported for given type"));
             }
-            // we can invert the content byte by byte, no need to distinguish between different typecodes
+            // we can invert the content byte by byte, no need to distinguish between different dtypes
             ndarray = ndarray_copy_view(self); // from this point, this is a dense copy
             uint8_t *array = (uint8_t *)ndarray->array;
             if(ndarray->boolean) {
@@ -777,16 +770,16 @@ mp_obj_t ndarray_unary_op(mp_unary_op_t op, mp_obj_t self_in) {
         
         case MP_UNARY_OP_NEGATIVE:
             ndarray = ndarray_copy_view(self); // from this point, this is a dense copy
-            if(self->typecode == NDARRAY_UINT8) {
+            if(self->dtype == NDARRAY_UINT8) {
                 uint8_t *array = (uint8_t *)ndarray->array;
                 for(size_t i=0; i < self->len; i++, array++) *array = -(*array);
-            } else if(self->typecode == NDARRAY_INT8) {
+            } else if(self->dtype == NDARRAY_INT8) {
                 int8_t *array = (int8_t *)ndarray->array;
                 for(size_t i=0; i < self->len; i++, array++) *array = -(*array);
-            } else if(self->typecode == NDARRAY_UINT16) {                
+            } else if(self->dtype == NDARRAY_UINT16) {                
                 uint16_t *array = (uint16_t *)ndarray->array;
                 for(size_t i=0; i < self->len; i++, array++) *array = -(*array);
-            } else if(self->typecode == NDARRAY_INT16) {
+            } else if(self->dtype == NDARRAY_INT16) {
                 int16_t *array = (int16_t *)ndarray->array;
                 for(size_t i=0; i < self->len; i++, array++) *array = -(*array);
             } else {
@@ -802,12 +795,12 @@ mp_obj_t ndarray_unary_op(mp_unary_op_t op, mp_obj_t self_in) {
         case MP_UNARY_OP_ABS:
             ndarray = ndarray_copy_view(self);
             // if Booleam, NDARRAY_UINT8, or NDARRAY_UINT16, there is nothing to do
-            if(self->typecode == NDARRAY_INT8) {
+            if(self->dtype == NDARRAY_INT8) {
                 int8_t *array = (int8_t *)ndarray->array;
                 for(size_t i=0; i < self->len; i++, array++) {
                     if(*array < 0) *array = -(*array);
                 }
-            } else if(self->typecode == NDARRAY_INT16) {
+            } else if(self->dtype == NDARRAY_INT16) {
                 int16_t *array = (int16_t *)ndarray->array;
                 for(size_t i=0; i < self->len; i++, array++) {
                     if(*array < 0) *array = -(*array);
@@ -842,8 +835,9 @@ mp_obj_t ndarray_strides(mp_obj_t self_in) {
     ndarray_obj_t *self = MP_OBJ_TO_PTR(self_in);
     mp_obj_t *items = m_new(mp_obj_t, self->ndim);
     int32_t *strides = (int32_t *)self->strides;
+    uint8_t itemsize = mp_binary_get_size('@', self->dtype, NULL);
     for(int8_t i=0; i < self->ndim; i++) {
-        items[i] = mp_obj_new_int(strides[i]);
+        items[i] = mp_obj_new_int(strides[i]*itemsize);
     }
     mp_obj_t tuple = mp_obj_new_tuple(self->ndim, items);
     m_del(mp_obj_t, items, self->ndim);
@@ -857,8 +851,10 @@ mp_obj_t ndarray_size(mp_obj_t self_in) {
 
 mp_obj_t ndarray_itemsize(mp_obj_t self_in) {
     ndarray_obj_t *self = MP_OBJ_TO_PTR(self_in);
-    return MP_OBJ_NEW_SMALL_INT(mp_binary_get_size('@', self->typecode, NULL));
+    return MP_OBJ_NEW_SMALL_INT(mp_binary_get_size('@', self->dtype, NULL));
 }
+
+MP_DEFINE_CONST_FUN_OBJ_1(ndarray_itemsize_obj, ndarray_itemsize);
 
 mp_obj_t ndarray_ndim(mp_obj_t self_in) {
     ndarray_obj_t *self = MP_OBJ_TO_PTR(self_in);
@@ -866,8 +862,7 @@ mp_obj_t ndarray_ndim(mp_obj_t self_in) {
 }
 
 mp_obj_t ndarray_transpose(mp_obj_t self_in) {
-    // this function should work with the n-dimensional case, too
-    // TODO: check, what happens to the offset here!
+    // TODO: check, what happens to the offset here, if we have a view
     ndarray_obj_t *self = MP_OBJ_TO_PTR(self_in);
     size_t *shape = m_new(size_t, self->ndim);
     int32_t *strides = m_new(int32_t, self->ndim);
@@ -876,7 +871,7 @@ mp_obj_t ndarray_transpose(mp_obj_t self_in) {
         strides[i] = self->strides[self->ndim-1-i];
     }
     // TODO: I am not sure ndarray_new_view is OK here...
-    ndarray_obj_t *ndarray = ndarray_new_view(self->array, self->ndim, shape, strides, self->boolean);
+    ndarray_obj_t *ndarray = ndarray_new_view(self, self->ndim, shape, strides);
     return MP_OBJ_FROM_PTR(ndarray);
 }
 
@@ -886,6 +881,10 @@ mp_obj_t ndarray_reshape(mp_obj_t oin, mp_obj_t _shape) {
     // TODO: not all reshaping operations can be realised via views! Only dense arrays for now
     // returns a new view with the specified shape
     ndarray_obj_t *ndarray_in = MP_OBJ_TO_PTR(oin);
+	if(!MP_OBJ_IS_TYPE(_shape, &mp_type_tuple)) {
+		mp_raise_TypeError(translate("shape must be a tuple"));
+    }
+
     mp_obj_tuple_t *shape = MP_OBJ_TO_PTR(_shape);
     
     size_t *new_shape = m_new(size_t, shape->len);
@@ -899,10 +898,11 @@ mp_obj_t ndarray_reshape(mp_obj_t oin, mp_obj_t _shape) {
         mp_raise_ValueError("input and output shapes are not compatible");
     }
 
+	// this won't work for arrays that are not dense!!!
     int32_t *new_strides = strides_from_shape(new_shape, shape->len);
-
-    // TODO: offset is 0 only for dense arrays!!!
-    ndarray_obj_t *ndarray = ndarray_new_view(ndarray_in->array, shape->len, new_shape, new_strides, ndarray_in->boolean);
+    printf("%u, %u\n", new_strides[0], new_strides[1]);
+    
+    ndarray_obj_t *ndarray = ndarray_new_view(ndarray_in, shape->len, new_shape, new_strides);
     return MP_OBJ_FROM_PTR(ndarray);
 }
 

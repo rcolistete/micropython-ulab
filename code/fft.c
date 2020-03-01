@@ -97,13 +97,13 @@ mp_obj_t fft_fft_ifft_spectrum(size_t n_args, mp_obj_t arg_re, mp_obj_t arg_im, 
     ndarray_obj_t *out_re = create_new_ndarray(1, len, NDARRAY_FLOAT);
     mp_float_t *data_re = (mp_float_t *)out_re->array->items;
     
-    if(re->array->typecode == NDARRAY_FLOAT) { 
+    if(re->array->dtype == NDARRAY_FLOAT) { 
         // By treating this case separately, we can save a bit of time.
         // I don't know if it is worthwhile, though...
         memcpy((mp_float_t *)out_re->array->items, (mp_float_t *)re->array->items, re->bytes);
     } else {
         for(size_t i=0; i < len; i++) {
-            *data_re++ = ndarray_get_float_value(re->array->items, re->array->typecode, i);
+            *data_re++ = ndarray_get_float_value(re->array->items, re->array->dtype, i);
         }
         data_re -= len;
     }
@@ -115,11 +115,11 @@ mp_obj_t fft_fft_ifft_spectrum(size_t n_args, mp_obj_t arg_re, mp_obj_t arg_im, 
         if (re->array->len != im->array->len) {
             mp_raise_ValueError(translate("real and imaginary parts must be of equal length"));
         }
-        if(im->array->typecode == NDARRAY_FLOAT) {
+        if(im->array->dtype == NDARRAY_FLOAT) {
             memcpy((mp_float_t *)out_im->array->items, (mp_float_t *)im->array->items, im->bytes);
         } else {
             for(size_t i=0; i < len; i++) {
-               *data_im++ = ndarray_get_float_value(im->array->items, im->array->typecode, i);
+               *data_im++ = ndarray_get_float_value(im->array->items, im->array->dtype, i);
             }
             data_im -= len;
         }

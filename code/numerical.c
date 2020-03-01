@@ -50,20 +50,20 @@ mp_obj_t numerical_linspace(size_t n_args, const mp_obj_t *pos_args, mp_map_t *k
     }
     mp_float_t value, step;
     value = mp_obj_get_float(args[0].u_obj);
-    uint8_t typecode = args[5].u_int;
+    uint8_t dtype = args[5].u_int;
     if(args[3].u_obj == mp_const_true) step = (mp_obj_get_float(args[1].u_obj)-value)/(len-1);
     else step = (mp_obj_get_float(args[1].u_obj)-value)/len;
-    ndarray_obj_t *ndarray = create_new_ndarray(1, len, typecode);
-    if(typecode == NDARRAY_UINT8) {
+    ndarray_obj_t *ndarray = create_new_ndarray(1, len, dtype);
+    if(dtype == NDARRAY_UINT8) {
         uint8_t *array = (uint8_t *)ndarray->array->items;
         for(size_t i=0; i < len; i++, value += step) array[i] = (uint8_t)value;
-    } else if(typecode == NDARRAY_INT8) {
+    } else if(dtype == NDARRAY_INT8) {
         int8_t *array = (int8_t *)ndarray->array->items;
         for(size_t i=0; i < len; i++, value += step) array[i] = (int8_t)value;
-    } else if(typecode == NDARRAY_UINT16) {
+    } else if(dtype == NDARRAY_UINT16) {
         uint16_t *array = (uint16_t *)ndarray->array->items;
         for(size_t i=0; i < len; i++, value += step) array[i] = (uint16_t)value;
-    } else if(typecode == NDARRAY_INT16) {
+    } else if(dtype == NDARRAY_INT16) {
         int16_t *array = (int16_t *)ndarray->array->items;
         for(size_t i=0; i < len; i++, value += step) array[i] = (int16_t)value;
     } else {
@@ -143,13 +143,13 @@ STATIC mp_obj_t numerical_sum_mean_ndarray(ndarray_obj_t *ndarray, mp_obj_t axis
     for(size_t j=0; j < N; j++) { // result index
         start = j * start_inc;
         sum = sq_sum = 0.0;
-        if(ndarray->array->typecode == NDARRAY_UINT8) {
+        if(ndarray->array->dtype == NDARRAY_UINT8) {
             RUN_SUM(ndarray, uint8_t, optype, len, start, increment);
-        } else if(ndarray->array->typecode == NDARRAY_INT8) {
+        } else if(ndarray->array->dtype == NDARRAY_INT8) {
             RUN_SUM(ndarray, int8_t, optype, len, start, increment);
-        } else if(ndarray->array->typecode == NDARRAY_UINT16) {
+        } else if(ndarray->array->dtype == NDARRAY_UINT16) {
             RUN_SUM(ndarray, uint16_t, optype, len, start, increment);
-        } else if(ndarray->array->typecode == NDARRAY_INT16) {
+        } else if(ndarray->array->dtype == NDARRAY_INT16) {
             RUN_SUM(ndarray, int16_t, optype, len, start, increment);
         } else { // this will be mp_float_t, no need to check
             RUN_SUM(ndarray, mp_float_t, optype, len, start, increment);
@@ -180,13 +180,13 @@ mp_obj_t numerical_std_ndarray(ndarray_obj_t *ndarray, mp_obj_t axis, size_t ddo
         start = j * start_inc;
         sum = 0.0;
         sum_sq = 0.0;
-        if(ndarray->array->typecode == NDARRAY_UINT8) {
+        if(ndarray->array->dtype == NDARRAY_UINT8) {
             RUN_STD(ndarray, uint8_t, len, start, increment);
-        } else if(ndarray->array->typecode == NDARRAY_INT8) {
+        } else if(ndarray->array->dtype == NDARRAY_INT8) {
             RUN_STD(ndarray, int8_t, len, start, increment);
-        } else if(ndarray->array->typecode == NDARRAY_UINT16) {
+        } else if(ndarray->array->dtype == NDARRAY_UINT16) {
             RUN_STD(ndarray, uint16_t, len, start, increment);
-        } else if(ndarray->array->typecode == NDARRAY_INT16) {
+        } else if(ndarray->array->dtype == NDARRAY_INT16) {
             RUN_STD(ndarray, int16_t, len, start, increment);
         } else { // this will be mp_float_t, no need to check
             RUN_STD(ndarray, mp_float_t, len, start, increment);
@@ -231,18 +231,18 @@ mp_obj_t numerical_argmin_argmax_ndarray(ndarray_obj_t *ndarray, mp_obj_t axis, 
         // (we would also need extra flash space)
         results = create_new_ndarray(m, n, NDARRAY_UINT16);
     } else {
-        results = create_new_ndarray(m, n, ndarray->array->typecode);
+        results = create_new_ndarray(m, n, ndarray->array->dtype);
     }
     
     for(size_t j=0; j < N; j++) { // result index
         start = j * start_inc;
-        if((ndarray->array->typecode == NDARRAY_UINT8) || (ndarray->array->typecode == NDARRAY_INT8)) {
+        if((ndarray->array->dtype == NDARRAY_UINT8) || (ndarray->array->dtype == NDARRAY_INT8)) {
             if((optype == NUMERICAL_MAX) || (optype == NUMERICAL_MIN)) {
                 RUN_ARGMIN(ndarray, results, uint8_t, uint8_t, len, start, increment, optype, j);
             } else {
                 RUN_ARGMIN(ndarray, results, uint8_t, uint16_t, len, start, increment, optype, j);                
             }
-        } else if((ndarray->array->typecode == NDARRAY_UINT16) || (ndarray->array->typecode == NDARRAY_INT16)) {
+        } else if((ndarray->array->dtype == NDARRAY_UINT16) || (ndarray->array->dtype == NDARRAY_INT16)) {
             RUN_ARGMIN(ndarray, results, uint16_t, uint16_t, len, start, increment, optype, j);
         } else {
             if((optype == NUMERICAL_MAX) || (optype == NUMERICAL_MIN)) {
@@ -390,7 +390,7 @@ mp_obj_t numerical_roll(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_ar
     }
 
     ndarray_obj_t *in = MP_OBJ_TO_PTR(oin);
-    uint8_t _sizeof = mp_binary_get_size('@', in->array->typecode, NULL);
+    uint8_t _sizeof = mp_binary_get_size('@', in->array->dtype, NULL);
     size_t len;
     int16_t _shift;
     uint8_t *array = (uint8_t *)in->array->items;
@@ -474,7 +474,7 @@ mp_obj_t numerical_flip(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_ar
     ndarray_obj_t *in = MP_OBJ_TO_PTR(args[0].u_obj);
     mp_obj_t oout = ndarray_copy(args[0].u_obj);
     ndarray_obj_t *out = MP_OBJ_TO_PTR(oout);
-    uint8_t _sizeof = mp_binary_get_size('@', in->array->typecode, NULL);
+    uint8_t _sizeof = mp_binary_get_size('@', in->array->dtype, NULL);
     uint8_t *array_in = (uint8_t *)in->array->items;
     uint8_t *array_out = (uint8_t *)out->array->items;    
     size_t len;
@@ -539,7 +539,7 @@ mp_obj_t numerical_diff(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_ar
     
     if(increment == 1) { // differentiate along the horizontal axis 
         if(n >= in->n) {
-            out = create_new_ndarray(in->m, 0, in->array->typecode);
+            out = create_new_ndarray(in->m, 0, in->array->dtype);
             m_del(uint8_t, stencil, n);
             return MP_OBJ_FROM_PTR(out);
         }
@@ -547,21 +547,21 @@ mp_obj_t numerical_diff(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_ar
         M = in->m;
     } else { // differentiate along vertical axis
         if(n >= in->m) {
-            out = create_new_ndarray(0, in->n, in->array->typecode);
+            out = create_new_ndarray(0, in->n, in->array->dtype);
             m_del(uint8_t, stencil, n);
             return MP_OBJ_FROM_PTR(out);
         }
         M = in->m - n;
         N = in->n;
     }
-    out = create_new_ndarray(M, N, in->array->typecode);
-    if(in->array->typecode == NDARRAY_UINT8) {
+    out = create_new_ndarray(M, N, in->array->dtype);
+    if(in->array->dtype == NDARRAY_UINT8) {
         CALCULATE_DIFF(in, out, uint8_t, M, N, in->n, increment);
-    } else if(in->array->typecode == NDARRAY_INT8) {
+    } else if(in->array->dtype == NDARRAY_INT8) {
         CALCULATE_DIFF(in, out, int8_t, M, N, in->n, increment);
-    }  else if(in->array->typecode == NDARRAY_UINT16) {
+    }  else if(in->array->dtype == NDARRAY_UINT16) {
         CALCULATE_DIFF(in, out, uint16_t, M, N, in->n, increment);
-    } else if(in->array->typecode == NDARRAY_INT16) {
+    } else if(in->array->dtype == NDARRAY_INT16) {
         CALCULATE_DIFF(in, out, int16_t, M, N, in->n, increment);
     } else {
         CALCULATE_DIFF(in, out, mp_float_t, M, N, in->n, increment);
@@ -613,9 +613,9 @@ mp_obj_t numerical_sort_helper(mp_obj_t oin, mp_obj_t axis, uint8_t inplace) {
     for(size_t start=0; start < end; start+=start_inc) {
         q = N; 
         k = (q >> 1);
-        if((ndarray->array->typecode == NDARRAY_UINT8) || (ndarray->array->typecode == NDARRAY_INT8)) {
+        if((ndarray->array->dtype == NDARRAY_UINT8) || (ndarray->array->dtype == NDARRAY_INT8)) {
             HEAPSORT(uint8_t, ndarray);
-        } else if((ndarray->array->typecode == NDARRAY_INT16) || (ndarray->array->typecode == NDARRAY_INT16)) {
+        } else if((ndarray->array->dtype == NDARRAY_INT16) || (ndarray->array->dtype == NDARRAY_INT16)) {
             HEAPSORT(uint16_t, ndarray);
         } else {
             HEAPSORT(mp_float_t, ndarray);
@@ -717,9 +717,9 @@ mp_obj_t numerical_argsort(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw
     for(size_t start=0; start < end; start+=start_inc) {
         q = N; 
         k = (q >> 1);
-        if((ndarray->array->typecode == NDARRAY_UINT8) || (ndarray->array->typecode == NDARRAY_INT8)) {
+        if((ndarray->array->dtype == NDARRAY_UINT8) || (ndarray->array->dtype == NDARRAY_INT8)) {
             HEAP_ARGSORT(uint8_t, ndarray, index_array);
-        } else if((ndarray->array->typecode == NDARRAY_INT16) || (ndarray->array->typecode == NDARRAY_INT16)) {
+        } else if((ndarray->array->dtype == NDARRAY_INT16) || (ndarray->array->dtype == NDARRAY_INT16)) {
             HEAP_ARGSORT(uint16_t, ndarray, index_array);
         } else {
             HEAP_ARGSORT(mp_float_t, ndarray, index_array);
