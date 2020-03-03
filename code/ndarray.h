@@ -48,8 +48,8 @@ enum NDARRAY_TYPE {
 
 typedef struct _ndarray_obj_t {
 	mp_obj_base_t base;
-	size_t *shape;
-	int32_t *strides;
+	size_t shape[ULAB_MAX_DIMS];
+	int32_t strides[ULAB_MAX_DIMS];
 	size_t len;
 	void *array;
 	uint8_t dtype;
@@ -70,7 +70,7 @@ mp_float_t ndarray_get_float_value(void *, uint8_t , size_t );
 void fill_array_iterable(mp_float_t *, mp_obj_t );
 
 void ndarray_print(const mp_print_t *, mp_obj_t , mp_print_kind_t );
-void ndarray_assign_elements(void *, mp_obj_t , uint8_t , size_t *);
+void ndarray_assign_elements(ndarray_obj_t *, mp_obj_t , uint8_t , size_t *);
 ndarray_obj_t *ndarray_new_dense_ndarray(uint8_t , size_t *, uint8_t );
 ndarray_obj_t *ndarray_new_ndarray_from_tuple(mp_obj_tuple_t *, uint8_t );
 ndarray_obj_t *ndarray_new_ndarray(uint8_t , size_t *, int32_t *, uint8_t );

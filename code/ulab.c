@@ -30,7 +30,7 @@
 #include "numerical.h"
 #include "extras.h"
 
-STATIC MP_DEFINE_STR_OBJ(ulab_version_obj, "0.33.3-matrix");
+STATIC MP_DEFINE_STR_OBJ(ulab_version_obj, "0.33.3-static-ndim");
 
 
 MP_DEFINE_CONST_FUN_OBJ_1(ndarray_size_obj, ndarray_size);
@@ -91,6 +91,7 @@ STATIC const mp_map_elem_t ulab_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_extras), MP_ROM_PTR(&ulab_extras_module) },
     #endif
     // class constants
+	{ MP_ROM_QSTR(MP_QSTR_bool), MP_ROM_INT(NDARRAY_BOOL) },
     { MP_ROM_QSTR(MP_QSTR_uint8), MP_ROM_INT(NDARRAY_UINT8) },
     { MP_ROM_QSTR(MP_QSTR_int8), MP_ROM_INT(NDARRAY_INT8) },
     { MP_ROM_QSTR(MP_QSTR_uint16), MP_ROM_INT(NDARRAY_UINT16) },
