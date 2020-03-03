@@ -19,19 +19,33 @@
 
 mp_obj_module_t ulab_vectorise_module;
 
-#define ITERATE_VECTOR(type, source, out) do {\
-    type *input = (type *)(source)->array;\
+#define ITERATE_VECTOR(type, array, out) do {\
+    type *input = (type *)(array);\
     for(size_t i=0; i < (source)->len; i++) {\
-                *out++ = f(*input++);\
+		*out++ = f(*input++);\
     }\
 } while(0)
-    
-#define ITERATE_VECTOR_SLICE(type, source, out, strides_array, shape_strides) do{\
-    size_t tindex, nindex;\
+
+#define ITERATE_VECTOR_SLICE(type, source, out) do{\
     type *input = (type *)(source)->array;\
-    for(size_t i=0; i < len; i++) {\
-        NDARRAY_INDEX_FROM_FLAT2((source), (strides_array), (shape_strides), i, tindex, nindex);\
-        (out)[i] = f(input[nindex]);\
+	size_t coords[ULAB_MAX_DIMS];\
+	for(uint8_t i=0; i < ULAB_MAX_DIMS; i++) coords[i] = 0;\
+    size_t offset = 0;\
+	for(size_t i=0; i < (source)->len; i++) {\
+		mp_float_t value = ndarray_get_float_value(input, (source)->dtype, offset);\
+		(out)[i] = f(value);\
+		offset += (source)->strides[(source)->ndim-1];\
+		coords[(source)->ndim-1] += 1;\
+		for(uint8_t j=(source)->ndim-1; j > 0; j--) {\
+			if(coords[j] == (source)->shape[j]) {\
+				offset -= (source)->shape[j] * (source)->strides[j];\
+				offset += (source)->strides[j-1];\
+				coords[j] = 0;\
+				coords[j-1] += 1;\
+			} else {\
+				break;\
+			}\
+		}\
     }\
 } while(0)
 

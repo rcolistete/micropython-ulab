@@ -136,11 +136,12 @@ void ndarray_assign_elements(ndarray_obj_t *ndarray, mp_obj_t iterable, uint8_t 
 
 bool ndarray_is_dense(ndarray_obj_t *ndarray) {
 	// returns true, if the array is dense, false otherwise
-	size_t len = 1;
+	// the array should dense, if the very first stride can be calculated from shape
+	size_t stride = 1;
 	for(uint8_t i=0; i < ndarray->ndim; i++) {
-        len *= ndarray->shape[i];
+        stride *= ndarray->shape[i];
     }
-	return len == ndarray->len ? true : false;
+	return stride == ndarray->strides[0] ? true : false;
 }
  
 ndarray_obj_t *ndarray_new_ndarray(uint8_t ndim, size_t *shape, int32_t *strides, uint8_t dtype) {
@@ -868,6 +869,8 @@ mp_obj_t ndarray_strides(mp_obj_t self_in) {
     m_del(mp_obj_t, items, self->ndim);
     return tuple;
 }
+
+MP_DEFINE_CONST_FUN_OBJ_1(ndarray_strides_obj, ndarray_strides);
 
 mp_obj_t ndarray_size(mp_obj_t self_in) {
     ndarray_obj_t *self = MP_OBJ_TO_PTR(self_in);
