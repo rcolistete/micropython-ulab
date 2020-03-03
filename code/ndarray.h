@@ -17,7 +17,8 @@
 #include "py/objstr.h"
 #include "py/objlist.h"
 
-#define PRINT_MAX  10
+#define ULAB_MAX_DIMS	4
+#define ULAB_PRINT_MAX  10
 
 #if MICROPY_FLOAT_IMPL == MICROPY_FLOAT_IMPL_FLOAT
 #define FLOAT_dtype 'f'
@@ -46,15 +47,22 @@ enum NDARRAY_TYPE {
 };
 
 typedef struct _ndarray_obj_t {
-    mp_obj_base_t base;
-    uint8_t dtype;
-    uint8_t boolean;
-    uint8_t ndim;
-    size_t *shape;
-    int32_t *strides;
-    size_t len;
-    void *array;
+	mp_obj_base_t base;
+	size_t *shape;
+	int32_t *strides;
+	size_t len;
+	void *array;
+	uint8_t dtype;
+	uint8_t boolean;
+	uint8_t ndim;
 } ndarray_obj_t;
+
+typedef struct _short_descriptor_t {
+	size_t shape[ULAB_MAX_DIMS];
+	int32_t left_strides[ULAB_MAX_DIMS];
+	int32_t right_strides[ULAB_MAX_DIMS];
+	bool broadcastable;
+} short_descriptor_t;
 
 mp_obj_t mp_obj_new_ndarray_iterator(mp_obj_t , size_t , mp_obj_iter_buf_t *);
 
@@ -87,6 +95,8 @@ mp_obj_t ndarray_itemsize(mp_obj_t );
 MP_DECLARE_CONST_FUN_OBJ_1(ndarray_itemsize_obj);
 
 mp_obj_t ndarray_ndim(mp_obj_t );
+MP_DECLARE_CONST_FUN_OBJ_1(ndarray_ndim_obj);
+
 mp_obj_t ndarray_flatten(size_t , const mp_obj_t *, mp_map_t *);
 
 mp_obj_t ndarray_reshape(mp_obj_t , mp_obj_t );
@@ -99,12 +109,6 @@ mp_int_t ndarray_get_buffer(mp_obj_t obj, mp_buffer_info_t *bufinfo, mp_uint_t f
 //void ndarray_attributes(mp_obj_t , qstr , mp_obj_t *);
 
 
-#define CREATE_SINGLE_ITEM(outarray, type, dtype, value) do {\
-    ndarray_obj_t *tmp = create_new_ndarray(1, 1, (dtype));\
-    type *tmparr = (type *)tmp->array->items;\
-    tmparr[0] = (type)(value);\
-    (outarray) = MP_OBJ_FROM_PTR(tmp);\
-} while(0)
 
 /*  
     mp_obj_t row = mp_obj_new_list(n, NULL);
@@ -124,21 +128,31 @@ mp_int_t ndarray_get_buffer(mp_obj_t obj, mp_buffer_info_t *bufinfo, mp_uint_t f
     }\
 } while(0)
 
-
-#define RUN_BINARY_LOOP(dtype, type_out, type_left, type_right, ol, or, op) do {\
-    uint8_t inc = 0;\
-    inc++;\
-} while(0)
-
 /*
-#define RUN_BINARY_LOOP(dtype, type_out, type_left, type_right, ol, or, op) do {\
-    type_left *left = (type_left *)(ol)->array->items;\
-    type_right *right = (type_right *)(or)->array->items;\
-    uint8_t inc = 0;\
-    if((or)->array->len > 1) inc = 1;\
+#define RUN_BINARY_LOOP(dtype, type_out, type_left, type_right, ol, or, op, broadcaster) do {\
+    type_left *left = (type_left *)(ol)->array;\
+    type_right *right = (type_right *)(or)->array;\
     if(((op) == MP_BINARY_OP_ADD) || ((op) == MP_BINARY_OP_SUBTRACT) || ((op) == MP_BINARY_OP_MULTIPLY)) {\
-        ndarray_obj_t *out = create_new_ndarray(ol->m, ol->n, dtype);\
+        ndarray_obj_t *out = ndarray_new_dense_ndarray((broadcaster)->ndim, (broadcaster)->shape, dtype);\
         type_out *(odata) = (type_out *)out->array->items;\
+        for(size_t i=0; i < source->len; i++) {
+		memcpy(new_array, array, itemsize);
+		new_array += itemsize;        
+		array += last_stride*itemsize;
+		coords[source->ndim-1] += 1;
+		for(uint8_t j=source->ndim-1; j > 0; j--) {
+			if(coords[j] == source->shape[j]) {
+				array -= source->shape[j] * source->strides[j] * itemsize;
+				array += source->strides[j-1] * itemsize;
+				coords[j] = 0;
+				coords[j-1] += 1;
+			} else { // coordinates can change only, if the last coordinate changes
+				break;
+			}
+		}
+	}
+
+        
         if((op) == MP_BINARY_OP_ADD) { for(size_t i=0, j=0; i < (ol)->array->len; i++, j+=inc) odata[i] = left[i] + right[j];}\
         if((op) == MP_BINARY_OP_SUBTRACT) { for(size_t i=0, j=0; i < (ol)->array->len; i++, j+=inc) odata[i] = left[i] - right[j];}\
         if((op) == MP_BINARY_OP_MULTIPLY) { for(size_t i=0, j=0; i < (ol)->array->len; i++, j+=inc) odata[i] = left[i] * right[j];}\

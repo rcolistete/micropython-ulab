@@ -25,15 +25,6 @@ mp_obj_module_t ulab_vectorise_module;
                 *out++ = f(*input++);\
     }\
 } while(0)
-
-#define ITERATE_VECTOR_SLICE(type, source, out, strides_array, shape_strides) do{\
-    size_t tindex, nindex;\
-    type *input = (type *)(source)->array;\
-    for(size_t i=0; i < len; i++) {\
-        NDARRAY_INDEX_FROM_FLAT2((source), (strides_array), (shape_strides), i, tindex, nindex);\
-        (out)[i] = f(input[nindex]);\
-    }\
-} while(0)
     
 #define ITERATE_VECTOR_SLICE(type, source, out, strides_array, shape_strides) do{\
     size_t tindex, nindex;\
