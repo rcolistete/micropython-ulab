@@ -440,14 +440,14 @@ mp_obj_t ndarray_subscript_assign(ndarray_obj_t *lhs, ndarray_obj_t *rhs) {
 	for(uint8_t i=0; i < lhs->ndim; i++) {
 		lcoords[i] = 0;
 		if(diff_ndim > i) { // missing shape on RHS
-			rshape[i] = 0;			
+			rshape[i] = 0;
 		} else {
-			if(lhs->shape[i] == rhs->shape[i-diff_ndim]) { 
+			if(lhs->shape[i] == rhs->shape[i-diff_ndim]) {
 				// shape on RHS is equal to shape on LHS
-				rshape[i] = rhs->shape[i-diff_ndim];
+				rshape[i] = 1;
 			} else if(rhs->shape[i-diff_ndim] == 1) {
 				// shape on RHS is simply 1
-				rshape[i] = 0;				
+				rshape[i] = 0;
 			} else {
 				mp_raise_ValueError(translate("incompatible shapes in assignment"));
 			}
@@ -456,21 +456,22 @@ mp_obj_t ndarray_subscript_assign(ndarray_obj_t *lhs, ndarray_obj_t *rhs) {
 	// work with mp_obj_t, so that we don't have to deal with dtypes
     mp_obj_t item;
 	int32_t loffset = 0;
-	int32_t roffset = 0;	    
-    for(size_t i=0; i < lhs->len; i++) { // iterate backwards
+	int32_t roffset = 0;
+    for(size_t i=0; i < lhs->len; i++) {
         item = mp_binary_get_val_array(rhs->dtype, rhs->array, roffset);
         mp_binary_set_val_array(lhs->dtype, lhs->array, loffset, item);
         loffset += lhs->strides[lhs->ndim-1];
 		lcoords[lhs->ndim-1] += 1;
-		roffset += rhs->strides[rhs->ndim-1];
+		roffset += rhs->strides[rhs->ndim-1] * rshape[lhs->ndim-1];
         for(uint8_t j=lhs->ndim-1; j > 0; j--) {
             if(lcoords[j] == lhs->shape[j]) { // we are at a dimension boundary
 				loffset -= lhs->shape[j] * lhs->strides[j];
                 loffset += lhs->strides[j-1];
 				roffset -= rshape[j] * rhs->strides[j-diff_ndim];
-				roffset += rhs->strides[j-diff_ndim-1];
+				roffset += rshape[j-1] * rhs->strides[j-diff_ndim-1];
 				lcoords[j] = 0;
                 lcoords[j-1] += 1;
+				if(j <= diff_ndim) roffset = 0;
             } else { // coordinates can change only, if the last coordinate changes
                 break;
             }
@@ -501,7 +502,7 @@ ndarray_obj_t *ndarray_from_mp_obj(mp_obj_t object) {
     } else if(mp_obj_is_float(object)) {
 		dtype = NDARRAY_FLOAT;
     } else {
-        mp_raise_TypeError("wrong operand type");
+        mp_raise_TypeError(translate("wrong operand type"));
     }
 	ndarray_obj_t *ndarray = ndarray_new_linear_array(1, dtype);
 	mp_binary_set_val_array(dtype, ndarray->array, 0, object);
@@ -527,7 +528,7 @@ mp_obj_t ndarray_subscr(mp_obj_t self_in, mp_obj_t index, mp_obj_t value) {
 		} else if(MP_OBJ_IS_TYPE(index, &mp_type_tuple)) {
 			return MP_OBJ_FROM_PTR(ndarray_new_view_from_tuple(self, index));
 		} else {
-			mp_raise_ValueError("wrong index type in array");
+			mp_raise_ValueError(translate("wrong index type in array"));
 		}			
     } else { // assignment to slices; the value must be an ndarray, or a scalar
 		if(!MP_OBJ_IS_TYPE(value, &ulab_ndarray_type) && 
@@ -549,7 +550,7 @@ mp_obj_t ndarray_subscr(mp_obj_t self_in, mp_obj_t index, mp_obj_t value) {
 		} else if(MP_OBJ_IS_TYPE(index, &mp_type_tuple)) {
 			lhs = ndarray_new_view_from_tuple(self, index);
 		} else {
-			mp_raise_ValueError("wrong index type in array");
+			mp_raise_ValueError(translate("wrong index type in array"));
 		}
 		// at this point, we have a view that is of the correct shape, 
 		// so we can compare it to the value
@@ -913,7 +914,7 @@ mp_obj_t ndarray_reshape(mp_obj_t oin, mp_obj_t _shape) {
 
     mp_obj_tuple_t *shape = MP_OBJ_TO_PTR(_shape);
     if(shape->len > ULAB_MAX_DIMS) {
-        mp_raise_ValueError("maximum number of dimensions is 4");
+        mp_raise_ValueError(translate("maximum number of dimensions is 4"));
 	}
     size_t *new_shape = m_new(size_t, shape->len);
     size_t new_length = 1;
@@ -923,7 +924,7 @@ mp_obj_t ndarray_reshape(mp_obj_t oin, mp_obj_t _shape) {
     }
     
     if(ndarray_in->len != new_length) {
-        mp_raise_ValueError("input and output shapes are not compatible");
+        mp_raise_ValueError(translate("input and output shapes are not compatible"));
     }
 
 	ndarray_obj_t *ndarray;
