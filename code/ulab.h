@@ -15,7 +15,7 @@
 // vectorise (all functions) takes approx. 3 kB of flash space
 #define ULAB_VECTORISE_MODULE (1)
 
-// linalg adds around 6 kB
+// linalg adds around 4.5 kB
 #define ULAB_LINALG_MODULE (0)
 
 // poly is approx. 2.5 kB

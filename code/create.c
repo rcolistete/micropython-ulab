@@ -59,51 +59,6 @@ mp_obj_t create_ones(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args)
 
 MP_DEFINE_CONST_FUN_OBJ_KW(create_ones_obj, 0, create_ones);
 
-#if 0
-mp_obj_t create_eye(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
-    static const mp_arg_t allowed_args[] = {
-        { MP_QSTR_, MP_ARG_REQUIRED | MP_ARG_INT, {.u_int = 0} },
-        { MP_QSTR_M, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_rom_obj = mp_const_none } },
-        { MP_QSTR_k, MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = 0} },        
-        { MP_QSTR_dtype, MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = NDARRAY_FLOAT} },
-    };
-
-    mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
-    mp_arg_parse_all(n_args, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
-
-    size_t n = args[0].u_int, m;
-    int16_t k = args[2].u_int;
-    uint8_t dtype = args[3].u_int;
-    if(args[1].u_rom_obj == mp_const_none) {
-        m = n;
-    } else {
-        m = mp_obj_get_int(args[1].u_rom_obj);
-    }
-    
-    ndarray_obj_t *ndarray = create_new_ndarray(m, n, dtype);
-    mp_obj_t one = mp_obj_new_int(1);
-    size_t i = 0;
-    if((k >= 0) && (k < n)) {
-        while(k < n) {
-            mp_binary_set_val_array(dtype, ndarray->array, i*n+k, one);
-            k++;
-            i++;
-        }
-    } else if((k < 0) && (-k < m)) {
-        k = -k;
-        i = 0;
-        while(k < m) {
-            mp_binary_set_val_array(dtype, ndarray->array, k*n+i, one);
-            k++;
-            i++;
-        }
-    }
-    return MP_OBJ_FROM_PTR(ndarray);
-}
-
-MP_DEFINE_CONST_FUN_OBJ_KW(create_eye_obj, 0, create_eye);
-
-#endif
 mp_obj_t create_linspace(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
     static const mp_arg_t allowed_args[] = {
         { MP_QSTR_, MP_ARG_REQUIRED | MP_ARG_OBJ, {.u_rom_obj = mp_const_none } },
