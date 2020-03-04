@@ -58,9 +58,12 @@ typedef struct _ndarray_obj_t {
 } ndarray_obj_t;
 
 typedef struct _short_descriptor_t {
-	size_t shape[ULAB_MAX_DIMS];
+	size_t left_shape[ULAB_MAX_DIMS];
+	size_t right_shape[ULAB_MAX_DIMS];
+	size_t output_shape[ULAB_MAX_DIMS];
 	int32_t left_strides[ULAB_MAX_DIMS];
 	int32_t right_strides[ULAB_MAX_DIMS];
+	int32_t output_strides[ULAB_MAX_DIMS];
 	bool broadcastable;
 } short_descriptor_t;
 

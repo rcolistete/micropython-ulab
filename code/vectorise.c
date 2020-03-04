@@ -70,7 +70,6 @@ mp_obj_t vectorise_generic_vector(mp_obj_t o_in, mp_float_t (*f)(mp_float_t)) {
 		mp_obj_t item, iterable = mp_getiter(o_in, &iter_buf);
 		while ((item = mp_iternext(iterable)) != MP_OBJ_STOP_ITERATION) {
 			x = mp_obj_get_float(item);
-			printf("%f\n", x);
 			*array++ = f(x);
 		}
 		return MP_OBJ_FROM_PTR(ndarray);

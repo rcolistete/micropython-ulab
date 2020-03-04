@@ -215,6 +215,7 @@ ndarray_obj_t *ndarray_new_view(ndarray_obj_t *source, uint8_t ndim, size_t *sha
 
 void ndarray_copy_array(ndarray_obj_t *source, ndarray_obj_t *target) {
 	// copies the content of source->array into a new dense void pointer
+	// it is assumed that the dtypes in source and target are the same
 	size_t *coords = ndarray_new_coords(source->ndim);
 	int32_t last_stride = source->strides[source->ndim-1];
 	uint8_t itemsize = mp_binary_get_size('@', source->dtype, NULL);
@@ -294,6 +295,7 @@ STATIC mp_obj_t ndarray_make_new_core(const mp_obj_type_t *type, size_t n_args, 
     
     ndarray_obj_t *self;
 
+	// TODO: this doesn't allow dtype conversion. 
     if(MP_OBJ_IS_TYPE(args[0], &ulab_ndarray_type)) {
         ndarray_obj_t *ndarray = MP_OBJ_TO_PTR(args[0]);
         self = ndarray_copy_view(ndarray);
@@ -428,15 +430,19 @@ ndarray_obj_t *ndarray_new_view_from_tuple(ndarray_obj_t *ndarray, mp_obj_tuple_
 }
 
 mp_obj_t ndarray_subscript_assign(ndarray_obj_t *lhs, ndarray_obj_t *rhs) {
+	// assign the values in the right-hand-side array into the left-hand-side
+	// array, and stretches the axes, if necessary
 	if(rhs->ndim > lhs->ndim) {
 		mp_raise_ValueError(translate("right hand side is out of bounds"));
 	}
 	size_t rshape[ULAB_MAX_DIMS];
 	size_t lcoords[ULAB_MAX_DIMS];
-	// we can only assign into a tensor, if the right hand side shape is 
-	// missing (counted from the last dimension)
-	// equal to the left hand side shape, 
-	// equal to 1
+	// we can only assign into a tensor, if the right hand side shape 
+	// fulfils one of the conditions
+	// 
+	// - axis is missing (counted from the last dimension)
+	// - axis length is equal to the axis length on the left hand side, 
+	// - axis length is equal to 1
 	uint8_t diff_ndim = lhs->ndim - rhs->ndim;
 	for(uint8_t i=0; i < lhs->ndim; i++) {
 		lcoords[i] = 0;
@@ -610,10 +616,11 @@ mp_obj_t mp_obj_new_ndarray_iterator(mp_obj_t ndarray, size_t cur, mp_obj_iter_b
 }
 #if 0
 broadcast_shape_t ndarray_can_broadcast(ndarray_obj_t *lhs, ndarray_obj_t *rhs) {
-    // returns NULL, if arrays cannot be broadcast together, 
-    // the new shape array otherwise
+	// returns a structure with the three sets of strides that can be used 
+	// in the iteration loop
     uint8_t ndim = MAX(lhs->ndim, rhs->ndim);
-    uint8_t diff = lhs->ndim > rhs->ndim ? lhs->ndim - rhs->ndim : rhs->ndim - lhs->ndim;
+    uint8_t min_ndiff = MIN(lhs->ndim, rhs->ndim);
+    uint8_t diff_ndim = lhs->ndim > rhs->ndim ? lhs->ndim - rhs->ndim : rhs->ndim - lhs->ndim;
 
 	broadcast_shape_t result;
     if(ndim > ULAB_MAX_DIMS) {
@@ -623,22 +630,25 @@ broadcast_shape_t ndarray_can_broadcast(ndarray_obj_t *lhs, ndarray_obj_t *rhs) 
 	}
 	
     for(uint8_t i=0; i < ndim; i++) {
-        result->shape[i] = 1;
-        result->left_coords[i] = 0;
-        result->right_coords[i] = 0;
+		result->left_shape[i] = 0;
+        result->right_shape[i] = 0;
+        result->output_shape[i] = 0;
+        result->left_strides[i] = 0;
+        result->right_strides[i] = 0;
+        result->output_strides[i] = 0;
     }
     result.broadcastable = true;
-    for(uint8_t i=0; i < ndim-diff; i++) { // till MIN(lhs->ndim, rhs->ndim)
+    for(uint8_t i=0; i < min_ndim; i++) {
         if((lhs->shape[lhs->ndim-i-1] == rhs->shape[rhs->ndim-i-1]) ||
            (lhs->shape[lhs->ndim-i-1] == 1) || (rhs->shape[rhs->ndim-i-1] == 1)) {
-            shape[ndim-i-1] = lhs->shape[lhs->ndim-i-1] > rhs->shape[rhs->ndim-i-1] ? lhs->shape[lhs->ndim-i-1] : rhs->shape[rhs->ndim-i-1];
+            result->target_shape[ndim-i-1] = lhs->shape[lhs->ndim-i-1] > rhs->shape[rhs->ndim-i-1] ? lhs->shape[lhs->ndim-i-1] : rhs->shape[rhs->ndim-i-1];
         } else {
             result->broadcastable = false;            
             break;
         }
     }
     if(result.broadcastable) {
-		for(uint8_t i=0; i < ndim-diff; i++) { // till MIN(lhs->ndim, rhs->ndim)
+		for(uint8_t i=0; i < min_ndim; i++) {
 			if(lhs->shape[lhs->ndim-i-1] == 1) {
 				if(rhs->shape[rhs->ndim-i-1] == 1)) {
 					left_coords[ndim-1-i] = lhs->strides[lhs->ndim-i-1];

@@ -25,7 +25,7 @@
 #define ULAB_NUMERICAL_MODULE (0)
 
 // FFT costs about 2 kB of flash space
-#define ULAB_FFT_MODULE (0)
+#define ULAB_FFT_MODULE (1)
 
 // the filter module takes about 1 kB of flash space
 #define ULAB_FILTER_MODULE (0)

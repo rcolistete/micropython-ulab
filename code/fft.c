@@ -89,40 +89,36 @@ mp_obj_t fft_fft_ifft_spectrum(size_t n_args, mp_obj_t arg_re, mp_obj_t arg_im, 
     }
     // Check if input is of length of power of 2
     ndarray_obj_t *re = MP_OBJ_TO_PTR(arg_re);
-    uint16_t len = re->array->len;
+    if(re->ndim != 1) {
+		mp_raise_TypeError(translate("FFT is implemented for linear arrays only"));
+	}
+    uint16_t len = re->len;
     if((len & (len-1)) != 0) {
         mp_raise_ValueError(translate("input array length must be power of 2"));
     }
     
-    ndarray_obj_t *out_re = create_new_ndarray(1, len, NDARRAY_FLOAT);
-    mp_float_t *data_re = (mp_float_t *)out_re->array->items;
+    ndarray_obj_t *out_re = ndarray_new_linear_array(len, NDARRAY_FLOAT);
+    mp_float_t *data_re = (mp_float_t *)out_re->array;
     
-    if(re->array->dtype == NDARRAY_FLOAT) { 
-        // By treating this case separately, we can save a bit of time.
-        // I don't know if it is worthwhile, though...
-        memcpy((mp_float_t *)out_re->array->items, (mp_float_t *)re->array->items, re->bytes);
-    } else {
-        for(size_t i=0; i < len; i++) {
-            *data_re++ = ndarray_get_float_value(re->array->items, re->array->dtype, i);
-        }
-        data_re -= len;
-    }
-    ndarray_obj_t *out_im = create_new_ndarray(1, len, NDARRAY_FLOAT);
-    mp_float_t *data_im = (mp_float_t *)out_im->array->items;
+	for(size_t i=0; i < len*re->strides[0]; i+=re->strides[0]) {
+		*data_re++ = ndarray_get_float_value(re->array, re->dtype, i);
+	}
+	data_re -= len;
+    ndarray_obj_t *out_im = ndarray_new_linear_array(len, NDARRAY_FLOAT);
+    mp_float_t *data_im = (mp_float_t *)out_im->array;
 
     if(n_args == 2) {
         ndarray_obj_t *im = MP_OBJ_TO_PTR(arg_im);
-        if (re->array->len != im->array->len) {
+        if(im->ndim != 1) {
+			mp_raise_TypeError(translate("FFT is implemented for linear arrays only"));			
+		}
+        if (re->len != im->len) {
             mp_raise_ValueError(translate("real and imaginary parts must be of equal length"));
         }
-        if(im->array->dtype == NDARRAY_FLOAT) {
-            memcpy((mp_float_t *)out_im->array->items, (mp_float_t *)im->array->items, im->bytes);
-        } else {
-            for(size_t i=0; i < len; i++) {
-               *data_im++ = ndarray_get_float_value(im->array->items, im->array->dtype, i);
-            }
-            data_im -= len;
-        }
+		for(size_t i=0; i < len*im->strides[0]; i+=im->strides[0]) {
+		   *data_im++ = ndarray_get_float_value(im->array, im->dtype, i);
+		}
+		data_im -= len;
     }
 
     if((type == FFT_FFT) || (type == FFT_SPECTRUM)) {
