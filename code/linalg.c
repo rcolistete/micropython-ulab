@@ -58,7 +58,9 @@ mp_obj_t linalg_size(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args)
 }
 
 MP_DEFINE_CONST_FUN_OBJ_KW(linalg_size_obj, 1, linalg_size);
+#endif
 
+#if ULAB_LINALG_MODULE || ULAB_POLY_MODULE
 bool linalg_invert_matrix(mp_float_t *data, size_t N) {
     // returns true, of the inversion was successful, 
     // false, if the matrix is singular
@@ -100,7 +102,9 @@ bool linalg_invert_matrix(mp_float_t *data, size_t N) {
     m_del(mp_float_t, unit, N*N);
     return true;
 }
+#endif
 
+#if ULAB_LINALG_MODULE
 mp_obj_t linalg_inv(mp_obj_t o_in) {
     // since inv is not a class method, we have to inspect the input argument first
     if(!MP_OBJ_IS_TYPE(o_in, &ulab_ndarray_type)) {

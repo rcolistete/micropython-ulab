@@ -19,7 +19,7 @@
 #define ULAB_LINALG_MODULE (0)
 
 // poly is approx. 2.5 kB
-#define ULAB_POLY_MODULE (0)
+#define ULAB_POLY_MODULE (1)
 
 // numerical is about 12 kB
 #define ULAB_NUMERICAL_MODULE (0)

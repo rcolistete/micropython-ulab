@@ -36,7 +36,7 @@ mp_float_t ndarray_get_float_value(void *data, uint8_t dtype, size_t index) {
     }
 }
 
-void fill_array_iterable(mp_float_t *array, mp_obj_t iterable) {
+void ndarray_fill_array_iterable(mp_float_t *array, mp_obj_t iterable) {
     mp_obj_iter_buf_t x_buf;
     mp_obj_t x_item, x_iterable = mp_getiter(iterable, &x_buf);
     size_t i=0;

@@ -27,32 +27,26 @@ bool object_is_nditerable(mp_obj_t o_in) {
     return false;
 }
 
-size_t get_nditerable_len(mp_obj_t o_in) {
-    if(MP_OBJ_IS_TYPE(o_in, &ulab_ndarray_type)) {
-        ndarray_obj_t *in = MP_OBJ_TO_PTR(o_in);
-        return in->array->len;
-    } else {
-        return (size_t)mp_obj_get_int(mp_obj_len_maybe(o_in));
-    }
-}
-
 mp_obj_t poly_polyval(mp_obj_t o_p, mp_obj_t o_x) {
     // TODO: return immediately, if o_p is not an iterable
     // TODO: there is a bug here: matrices won't work, 
     // because there is a single iteration loop
-    size_t m, n;
+    if(!object_is_nditerable(o_p) || !object_is_nditerable(o_x)) {
+		mp_raise_TypeError("input arguments must be iterables or ndarrays");
+	}
+    size_t len;
     if(MP_OBJ_IS_TYPE(o_x, &ulab_ndarray_type)) {
         ndarray_obj_t *ndx = MP_OBJ_TO_PTR(o_x);
-        m = ndx->m;
-        n = ndx->n;
+        if(ndx->ndim != 1) {
+			mp_raise_NotImplementedError("polyval is implemented for linear arrays only");
+		}
+        len = ndx->len;
     } else {
-        mp_obj_array_t *ix = MP_OBJ_TO_PTR(o_x);
-        m = 1;
-        n = ix->len;
+        len = (size_t)mp_obj_get_int(mp_obj_len_maybe(o_x));
     }
     // polynomials are going to be of type float, except, when both 
     // the coefficients and the independent variable are integers
-    ndarray_obj_t *out = create_new_ndarray(m, n, NDARRAY_FLOAT);
+    ndarray_obj_t *ndarray = ndarray_new_linear_array(len, NDARRAY_FLOAT);
     mp_obj_iter_buf_t x_buf;
     mp_obj_t x_item, x_iterable = mp_getiter(o_x, &x_buf);
 
@@ -60,16 +54,14 @@ mp_obj_t poly_polyval(mp_obj_t o_p, mp_obj_t o_x) {
     mp_obj_t p_item, p_iterable;
 
     mp_float_t x, y;
-    mp_float_t *outf = (mp_float_t *)out->array->items;
+    mp_float_t *array = (mp_float_t *)ndarray->array;
     uint8_t plen = mp_obj_get_int(mp_obj_len_maybe(o_p));
     mp_float_t *p = m_new(mp_float_t, plen);
     p_iterable = mp_getiter(o_p, &p_buf);
-    uint16_t i = 0;    
+    uint8_t i=0;
     while((p_item = mp_iternext(p_iterable)) != MP_OBJ_STOP_ITERATION) {
-        p[i] = mp_obj_get_float(p_item);
-        i++;
+        p[i++] = mp_obj_get_float(p_item);
     }
-    i = 0;
     while ((x_item = mp_iternext(x_iterable)) != MP_OBJ_STOP_ITERATION) {
         x = mp_obj_get_float(x_item);
         y = p[0];
@@ -77,10 +69,10 @@ mp_obj_t poly_polyval(mp_obj_t o_p, mp_obj_t o_x) {
             y *= x;
             y += p[j+1];
         }
-        outf[i++] = y;
+        *array++ = y;
     }
     m_del(mp_float_t, p, plen);
-    return MP_OBJ_FROM_PTR(out);
+    return MP_OBJ_FROM_PTR(ndarray);
 }
 
 MP_DEFINE_CONST_FUN_OBJ_2(poly_polyval_obj, poly_polyval);
@@ -92,14 +84,14 @@ mp_obj_t poly_polyfit(size_t  n_args, const mp_obj_t *args) {
     if(!object_is_nditerable(args[0])) {
         mp_raise_ValueError(translate("input data must be an iterable"));
     }
-    uint16_t lenx = 0, leny = 0;
+    size_t lenx = 0, leny = 0;
     uint8_t deg = 0;
     mp_float_t *x, *XT, *y, *prod;
 
     if(n_args == 2) { // only the y values are supplied
         // TODO: this is actually not enough: the first argument can very well be a matrix, 
         // in which case we are between the rock and a hard place
-        leny = (uint16_t)mp_obj_get_int(mp_obj_len_maybe(args[0]));
+        leny = (size_t)mp_obj_get_int(mp_obj_len_maybe(args[0]));
         deg = (uint8_t)mp_obj_get_int(args[1]);
         if(leny < deg) {
             mp_raise_ValueError(translate("more degrees of freedom than data points"));
@@ -110,10 +102,10 @@ mp_obj_t poly_polyfit(size_t  n_args, const mp_obj_t *args) {
             x[i] = i;
         }
         y = m_new(mp_float_t, leny);
-        fill_array_iterable(y, args[0]);
+        ndarray_fill_array_iterable(y, args[0]);
     } else if(n_args == 3) {
-        lenx = (uint16_t)mp_obj_get_int(mp_obj_len_maybe(args[0]));
-        leny = (uint16_t)mp_obj_get_int(mp_obj_len_maybe(args[0]));
+        lenx = (size_t)mp_obj_get_int(mp_obj_len_maybe(args[0]));
+        leny = (size_t)mp_obj_get_int(mp_obj_len_maybe(args[0]));
         if(lenx != leny) {
             mp_raise_ValueError(translate("input vectors must be of equal length"));
         }
@@ -122,9 +114,9 @@ mp_obj_t poly_polyfit(size_t  n_args, const mp_obj_t *args) {
             mp_raise_ValueError(translate("more degrees of freedom than data points"));
         }
         x = m_new(mp_float_t, lenx);
-        fill_array_iterable(x, args[0]);
+        ndarray_fill_array_iterable(x, args[0]);
         y = m_new(mp_float_t, leny);
-        fill_array_iterable(y, args[1]);
+        ndarray_fill_array_iterable(y, args[1]);
     }
     
     // one could probably express X as a function of XT, 
@@ -139,8 +131,8 @@ mp_obj_t poly_polyfit(size_t  n_args, const mp_obj_t *args) {
     
     prod = m_new(mp_float_t, (deg+1)*(deg+1)); // the product matrix is of shape (deg+1, deg+1)
     mp_float_t sum;
-    for(uint16_t i=0; i < deg+1; i++) { // column index
-        for(uint16_t j=0; j < deg+1; j++) { // row index
+    for(uint8_t i=0; i < deg+1; i++) { // column index
+        for(uint8_t j=0; j < deg+1; j++) { // row index
             sum = 0.0;
             for(size_t k=0; k < lenx; k++) {
                 // (j, k) * (k, i) 
@@ -163,9 +155,9 @@ mp_obj_t poly_polyfit(size_t  n_args, const mp_obj_t *args) {
     } 
     // at this point, we have the inverse of X^T * X
     // y is a column vector; x is free now, we can use it for storing intermediate values
-    for(uint16_t i=0; i < deg+1; i++) { // row index
+    for(uint8_t i=0; i < deg+1; i++) { // row index
         sum = 0.0;
-        for(uint16_t j=0; j < lenx; j++) { // column index
+        for(size_t j=0; j < lenx; j++) { // column index
             sum += XT[i*lenx+j]*y[j];
         }
         x[i] = sum;
@@ -173,15 +165,15 @@ mp_obj_t poly_polyfit(size_t  n_args, const mp_obj_t *args) {
     // XT is no longer needed
     m_del(mp_float_t, XT, (deg+1)*leny);
     
-    ndarray_obj_t *beta = create_new_ndarray(deg+1, 1, NDARRAY_FLOAT);
-    mp_float_t *betav = (mp_float_t *)beta->array->items;
+    ndarray_obj_t *beta = ndarray_new_linear_array(deg+1, NDARRAY_FLOAT);
+    mp_float_t *betav = (mp_float_t *)beta->array;
     // x[0..(deg+1)] contains now the product X^T * y; we can get rid of y
     m_del(float, y, leny);
     
     // now, we calculate beta, i.e., we apply prod = (X^T * X)^(-1) on x = X^T * y; x is a column vector now
-    for(uint16_t i=0; i < deg+1; i++) {
+    for(uint8_t i=0; i < deg+1; i++) {
         sum = 0.0;
-        for(uint16_t j=0; j < deg+1; j++) {
+        for(uint8_t j=0; j < deg+1; j++) {
             sum += prod[i*(deg+1)+j]*x[j];
         }
         betav[i] = sum;
