@@ -16,13 +16,13 @@
 #define ULAB_VECTORISE_MODULE (1)
 
 // linalg adds around 4.5 kB
-#define ULAB_LINALG_MODULE (0)
+#define ULAB_LINALG_MODULE (1)
 
 // poly is approx. 2.5 kB
 #define ULAB_POLY_MODULE (1)
 
 // numerical is about 12 kB
-#define ULAB_NUMERICAL_MODULE (0)
+#define ULAB_NUMERICAL_MODULE (1)
 
 // FFT costs about 2 kB of flash space
 #define ULAB_FFT_MODULE (1)

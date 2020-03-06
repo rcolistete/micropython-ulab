@@ -62,6 +62,37 @@ size_t *ndarray_new_coords(uint8_t ndim) {
     return coords;
 }
 
+size_t *ndarray_contract_shape(ndarray_obj_t *ndarray, uint8_t axis) {
+	// removes a single axis from the shape array
+	if(ndarray->shape[axis] == 1) {
+		mp_raise_ValueError(translate("tensor cannot be contracted along axis"));
+	}
+	size_t *shape = m_new(size_t, ndarray->ndim-1);	
+	uint8_t j = 0;
+	for(uint8_t i=0; i < ndarray->ndim; i++) {
+		if(axis != i) {
+			shape[j] = ndarray->shape[i];
+			j++;
+		}
+	}
+	return shape;
+}
+int32_t *ndarray_contract_strides(ndarray_obj_t *ndarray, uint8_t axis) {
+	// removes a single axis from the strides array
+	if(ndarray->shape[axis] == 1) {
+		mp_raise_ValueError(translate("tensor cannot be contracted along axis"));
+	}
+	int32_t *strides = m_new(int32_t, ndarray->ndim-1);
+	uint8_t j = 0;
+	for(uint8_t i=0; i < ndarray->ndim; i++) {
+		if(axis != i) {
+			strides[j] = ndarray->strides[i];
+			j++;
+		}
+	}
+	return strides;
+}
+
 void ndarray_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t kind) {
     (void)kind;
     ndarray_obj_t *self = MP_OBJ_TO_PTR(self_in);
@@ -70,7 +101,7 @@ void ndarray_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t ki
     int32_t last_stride = self->strides[self->ndim-1];
     
     size_t offset = 0;
-    if(self->len == 0) mp_print_str(print, "[");
+    if(self->len == 0) mp_print_str(print, "array([");
     for(size_t i=0; i < self->len; i++) {
         for(uint8_t j=0; j < print_extra; j++) {
             mp_print_str(print, "[");
@@ -88,7 +119,7 @@ void ndarray_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t ki
 		offset += last_stride;
         coords[self->ndim-1] += 1;
         if(coords[self->ndim-1] != self->shape[self->ndim-1]) {
-            mp_print_str(print, " ");
+            mp_print_str(print, ", ");
         }
         for(uint8_t j=self->ndim-1; j > 0; j--) {
             if(coords[j] == self->shape[j]) {
@@ -111,6 +142,19 @@ void ndarray_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t ki
     }
     m_del(size_t, coords, self->ndim);
 	mp_print_str(print, "]");
+	if(self->boolean) {
+		mp_print_str(print, ", dtype=bool)");
+	} else if(self->dtype == NDARRAY_UINT8) {
+		mp_print_str(print, ", dtype=uint8)");
+	} else if(self->dtype == NDARRAY_INT8) {
+		mp_print_str(print, ", dtype=int8)");
+	} else if(self->dtype == NDARRAY_UINT16) {
+		mp_print_str(print, ", dtype=uint16)");
+	} else if(self->dtype == NDARRAY_INT16) {
+		mp_print_str(print, ", dtype=int16)");
+	} else if(self->dtype == NDARRAY_FLOAT) {
+		mp_print_str(print, ", dtype=float)");
+	}
 }
 
 void ndarray_assign_elements(ndarray_obj_t *ndarray, mp_obj_t iterable, uint8_t dtype, size_t *idx) {

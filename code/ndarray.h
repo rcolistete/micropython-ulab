@@ -57,6 +57,13 @@ typedef struct _ndarray_obj_t {
 	uint8_t ndim;
 } ndarray_obj_t;
 
+// this is a helper structure, so that we can return shape AND strides from a function
+typedef struct _ndarray_header_obj_t {
+    size_t *shape;
+    int32_t *strides;
+    int8_t axis;
+} ndarray_header_obj_t;
+
 typedef struct _short_descriptor_t {
 	size_t left_shape[ULAB_MAX_DIMS];
 	size_t right_shape[ULAB_MAX_DIMS];
@@ -74,6 +81,10 @@ void ndarray_fill_array_iterable(mp_float_t *, mp_obj_t );
 
 void ndarray_print(const mp_print_t *, mp_obj_t , mp_print_kind_t );
 void ndarray_assign_elements(ndarray_obj_t *, mp_obj_t , uint8_t , size_t *);
+size_t *ndarray_new_coords(uint8_t );
+size_t *ndarray_contract_shape(ndarray_obj_t *, uint8_t );
+int32_t *ndarray_contract_strides(ndarray_obj_t *, uint8_t );
+
 ndarray_obj_t *ndarray_new_dense_ndarray(uint8_t , size_t *, uint8_t );
 ndarray_obj_t *ndarray_new_ndarray_from_tuple(mp_obj_tuple_t *, uint8_t );
 ndarray_obj_t *ndarray_new_ndarray(uint8_t , size_t *, int32_t *, uint8_t );

@@ -24,6 +24,34 @@ mp_obj_module_t ulab_numerical_module;
 //mp_obj_t numerical_maximum(mp_obj_t , mp_obj_t );
 //mp_obj_t numerical_cumsum(size_t , const mp_obj_t *, mp_map_t *);
 
+#define CALCULATE_FLAT_SUM_STD(ndarray, coords, type, value, optype) do {\
+    type *array = (type *)(ndarray)->array;\
+    (value) = 0.0;\
+    int32_t offset = 0;\
+    mp_float_t m = 0.0, mtmp;\
+	for(size_t i=0; i < (ndarray)->len; i++) {\
+		offset += (ndarray)->strides[(ndarray)->ndim-1];\
+		(coords)[(ndarray)->ndim-1] += 1;\
+		if((optype) == NUMERICAL_STD) {\
+			mtmp = m;\
+			m = mtmp + (array[offset] - mtmp) / (i+1);\
+			(value) += (array[offset] - mtmp) * (array[offset] - m);\
+		} else {\
+			(value) += array[offset];\
+		}\
+		for(uint8_t j=(ndarray)->ndim-1; j > 0; j--) {\
+			if((coords)[j] == (ndarray)->shape[j]) {\
+				offset -= (ndarray)->shape[j] * (ndarray)->strides[j];\
+				offset += (ndarray)->strides[j-1];\
+				(coords)[j] = 0;\
+				(coords)[j-1] += 1;\
+			} else {\
+				break;\
+			}\
+		}\
+	}\
+} while(0)
+
 #define RUN_ARGMIN(in, out, typein, typeout, len, start, increment, op, pos) do {\
     typein *array = (typein *)(in)->array->items;\
     typeout *outarray = (typeout *)(out)->array->items;\
@@ -65,20 +93,39 @@ mp_obj_module_t ulab_numerical_module;
     }\
 } while(0)
 
-#define CALCULATE_DIFF(in, out, type, M, N, inn, increment) do {\
-    type *source = (type *)(in)->array->items;\
-    type *target = (type *)(out)->array->items;\
-    for(size_t i=0; i < (M); i++) {\
-        for(size_t j=0; j < (N); j++) {\
-            for(uint8_t k=0; k < n+1; k++) {\
-                target[i*(N)+j] -= stencil[k]*source[i*(inn)+j+k*(increment)];\
-            }\
-        }\
-    }\
+#define CALCULATE_DIFF(in, out, type, axis, coords, shape, strides) do {\
+    type *source = (type *)(in)->array;\
+    type *target = (type *)(out)->array;\
+    size_t reduced_size = (in)->len/(in)->shape[(axis)];\
+	size_t offset = 0;\
+	if((in)->ndim == 1) {\
+		for(size_t j=0; j < (ndarray)->shape[0]-1; i++) {\
+			target[j] = source[offset+(ndarray)->strides[0]] - source[offset];\
+			offset += (ndarray)->strides[0];\
+		}\
+	} else {\
+		for(size_t i=0; i < reduced_size; i++) {\
+			for(size_t j=0; j < (ndarray)->shape[(axis)]-1; i++) {\
+				target[offset+j] = source[offset+j+(ndarray)->strides[(axis)]] - source[offset+j];\
+			}\
+			offset += (shape)[(ndarray)->ndim-2];\
+			(coords)[(ndarray)->ndim-2] += 1;\
+			for(uint8_t k=(ndim)->ndim-2; k > 0; k--) {\
+				if((coords)[k] == (shape)[k]) {\
+					offset -= (shape)[k] * (strides)[k];\
+					offset += (strides)[k-1];\
+					(coords)[k] = 0;\
+					(coords)[k-1] += 1;\
+				} else {\
+					break;\
+				}\
+			}\
+		}\
+	}\
 } while(0)
 
 #define HEAPSORT(type, ndarray) do {\
-    type *array = (type *)(ndarray)->array->items;\
+    type *array = (type *)(ndarray)->array;\
     type tmp;\
     for (;;) {\
         if (k > 0) {\
@@ -113,7 +160,7 @@ mp_obj_module_t ulab_numerical_module;
 // On the other hand, since this is a macro, it doesn't really matter
 // Keep in mind that initially, index_array[start+s*increment] = s
 #define HEAP_ARGSORT(type, ndarray, index_array) do {\
-    type *array = (type *)(ndarray)->array->items;\
+    type *array = (type *)(ndarray)->array;\
     type tmp;\
     uint16_t itmp;\
     for (;;) {\
