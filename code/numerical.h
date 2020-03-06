@@ -93,32 +93,50 @@ mp_obj_module_t ulab_numerical_module;
     }\
 } while(0)
 
-#define CALCULATE_DIFF(in, out, type, axis, coords, shape, strides) do {\
+#define CALCULATE_DIFF(in, out, type, axis, coords, _shape, strides) do {\
     type *source = (type *)(in)->array;\
     type *target = (type *)(out)->array;\
-    size_t reduced_size = (in)->len/(in)->shape[(axis)];\
+    size_t reduced_size = (in)->len/(in)->shape[(axis)] - 1;\
 	size_t offset = 0;\
 	if((in)->ndim == 1) {\
-		for(size_t j=0; j < (ndarray)->shape[0]-1; i++) {\
+		for(size_t j=0; j < (in)->shape[0]-1; j++) {\
 			target[j] = source[offset+(ndarray)->strides[0]] - source[offset];\
 			offset += (ndarray)->strides[0];\
 		}\
 	} else {\
 		for(size_t i=0; i < reduced_size; i++) {\
-			for(size_t j=0; j < (ndarray)->shape[(axis)]-1; i++) {\
-				target[offset+j] = source[offset+j+(ndarray)->strides[(axis)]] - source[offset+j];\
+			for(size_t j=0; j < (in)->shape[(axis)]-1; i++) {\
+				target[offset+j] = source[offset+j+(in)->strides[(axis)]] - source[offset+j];\
 			}\
-			offset += (shape)[(ndarray)->ndim-2];\
-			(coords)[(ndarray)->ndim-2] += 1;\
-			for(uint8_t k=(ndim)->ndim-2; k > 0; k--) {\
-				if((coords)[k] == (shape)[k]) {\
-					offset -= (shape)[k] * (strides)[k];\
+			offset += (shape)[(in)->ndim-2];\
+			(coords)[(in)->ndim-2] += 1;\
+			for(uint8_t k=(in)->ndim-2; k > 0; k--) {\
+				if((coords)[k] == (_shape)[k]) {\
+					offset -= (_shape)[k] * (strides)[k];\
 					offset += (strides)[k-1];\
 					(coords)[k] = 0;\
 					(coords)[k-1] += 1;\
 				} else {\
 					break;\
 				}\
+			}\
+		}\
+	}\
+} while(0)
+
+#define CALCULATE_DIFF2(in, out, type, axis, coords, shape) do {\
+    type *source = (type *)(in)->array;\
+    type *target = (type *)(out)->array;\
+	size_t displacement = (ndarray)->strides[(axis)];\
+	if((in)->ndim == 1) {\
+		for(size_t j=0; j < (in)->shape[0]-1; j++) {\
+			*target++ = source[displacement] - *source;\
+			source += displacement;\
+		}\
+	} else {\
+		for(size_t j=0; j < (shape)[0]; j++) {\
+			for(size_t i=0; i < (shape)[1]; i++) {\
+				target[i + j*(shape)[1]] = source[j*(in)->strides[1]+displacement] - source[j*(in)->strides[1]];\
 			}\
 		}\
 	}\

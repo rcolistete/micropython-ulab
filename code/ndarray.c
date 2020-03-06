@@ -101,7 +101,8 @@ void ndarray_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t ki
     int32_t last_stride = self->strides[self->ndim-1];
     
     size_t offset = 0;
-    if(self->len == 0) mp_print_str(print, "array([");
+    mp_print_str(print, "array(");
+    if(self->len == 0) mp_print_str(print, "[");
     for(size_t i=0; i < self->len; i++) {
         for(uint8_t j=0; j < print_extra; j++) {
             mp_print_str(print, "[");
