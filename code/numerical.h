@@ -136,8 +136,9 @@ mp_obj_module_t ulab_numerical_module;
 	} else {\
 		for(size_t j=0; j < (shape)[0]; j++) {\
 			for(size_t i=0; i < (shape)[1]; i++) {\
-				target[i + j*(shape)[1]] = source[j*(in)->strides[1]+displacement] - source[j*(in)->strides[1]];\
+				*target++ = source[j*(in)->strides[1]+displacement] - source[j*(in)->strides[1]];\
 			}\
+			target += (shape)[1];\
 		}\
 	}\
 } while(0)

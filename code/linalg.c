@@ -243,6 +243,36 @@ mp_obj_t linalg_eye(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) 
 
 MP_DEFINE_CONST_FUN_OBJ_KW(linalg_eye_obj, 0, linalg_eye);
 
+bool linalg_matrix_is_symmetric(mp_float_t *array, size_t _m) {
+	// returns true, if the matrix is symmetric, false otherwise
+    // make sure the matrix is symmetric
+	for(size_t m=0; m < _m; m++) {
+		for(size_t n=m+1; n < _m; n++) {
+            // compare entry (m, n) to (n, m)
+            // TODO: this must probably be scaled!
+            if(epsilon < MICROPY_FLOAT_C_FUN(fabs)(array[m*_m + n] - array[n*_m + m])) {
+				return false;
+            }
+        }
+    }
+    return true;
+}
+
+void linalg_fill_float_matrix(ndarray_obj_t *ndarray, mp_float_t *array) {
+	// given an arbitrary matrix, the function reads out its values, and 
+	// inserts them in an mp_float_t (dense) array
+	size_t pos = 0;
+    for(size_t m=0; m < ndarray->shape[0]; m++) {
+		for(size_t n=0; n < ndarray->shape[1]; n++) {
+			*array++ = ndarray_get_float_value(ndarray->array, ndarray->dtype, pos);
+			pos += ndarray->strides[1];
+		}
+		pos -= ndarray->shape[1] * ndarray->strides[1];
+		pos += ndarray->strides[0];
+	}
+	array -= (ndarray->shape[0] * ndarray->shape[1]);
+}
+
 mp_obj_t linalg_eig(mp_obj_t oin) {
     if(!MP_OBJ_IS_TYPE(oin, &ulab_ndarray_type)) {
         mp_raise_TypeError(translate("function defined for ndarrays only"));
@@ -258,7 +288,7 @@ mp_obj_t linalg_eig(mp_obj_t oin) {
 		}
     }
     // make sure the matrix is symmetric
-    for(size_t m=0; m < ndarray->shape[0]; m++) {
+/*    for(size_t m=0; m < ndarray->shape[0]; m++) {
         for(size_t n=m+1; n < ndarray->shape[1]; n++) {
             // compare entry (m, n) to (n, m)
             // TODO: this must probably be scaled!
@@ -266,10 +296,11 @@ mp_obj_t linalg_eig(mp_obj_t oin) {
                 mp_raise_ValueError(translate("input matrix is asymmetric"));
             }
         }
-    }
-    
-    // if we got this far, then the matrix will be symmetric
-    
+    }*/
+    if(!linalg_matrix_is_symmetric(array, ndarray->shape[0])) {
+		m_del(mp_float_t, array, ndarray->len);
+		mp_raise_ValueError(translate("input matrix is asymmetric"));
+	}    
     ndarray_obj_t *eigenvectors = ndarray_new_dense_ndarray(2, ndarray->shape, NDARRAY_FLOAT);
     mp_float_t *eigvectors = (mp_float_t *)eigenvectors->array;
     // start out with the unit matrix
@@ -378,11 +409,41 @@ mp_obj_t linalg_cholesky(mp_obj_t oin) {
 	if(!MP_OBJ_IS_TYPE(oin, &ulab_ndarray_type)) {
 		mp_raise_TypeError(translate("function is defined for ndarrays only"));
 	}
-	ndarray_obj_t *in = MP_OBJ_TO_PTR(oin);
-	if((in->ndim != 2) || (in->shape[0] != in->shape[1])) {
+	ndarray_obj_t *ndarray = MP_OBJ_TO_PTR(oin);
+	if((ndarray->ndim != 2) || (ndarray->shape[0] != ndarray->shape[1])) {
 		mp_raise_ValueError(translate("input must be square matrix"));
 	}
-	return mp_const_none;
+	ndarray_obj_t *result = ndarray_new_dense_ndarray(2, ndarray->shape, NDARRAY_FLOAT);
+	mp_float_t *array = (mp_float_t *)result->array;
+	linalg_fill_float_matrix(ndarray, array);
+    if(!linalg_matrix_is_symmetric(array, ndarray->shape[0])) {
+		m_del(mp_float_t, array, ndarray->len);
+		mp_raise_ValueError(translate("input matrix is asymmetric"));
+	}
+	mp_float_t sum = 0.0;
+	mp_float_t *diag = m_new(mp_float_t, ndarray->shape[0]);
+	for(size_t i=0; i < ndarray->shape[0]; i++) {
+		printf("i: %ld\n", i);
+		for(size_t j=i; j < ndarray->shape[0]; j++) {
+			printf("j: %ld\n", j);
+			sum=array[i*ndarray->shape[0] + j];
+			for(size_t k=i; k > 0; k--) {
+				printf("k: %ld\n", k);
+				sum -= 	array[i*ndarray->shape[0] + k] * array[j*ndarray->shape[0] + k]; 
+			}
+			if(i == j) {
+				if(sum <= 0.0) {
+					mp_raise_ValueError(translate("matrix is not positive definite"));
+					m_del(mp_float_t, diag, ndarray->shape[0]);
+				}
+				diag[i] = MICROPY_FLOAT_C_FUN(sqrt)(sum);
+			} else {
+				array[j*ndarray->shape[0] + i] = sum / diag[i];
+			}
+		}
+	}
+	m_del(mp_float_t, diag, ndarray->shape[0]);
+	return MP_OBJ_FROM_PTR(result);
 }
 
 MP_DEFINE_CONST_FUN_OBJ_1(linalg_cholesky_obj, linalg_cholesky);
@@ -397,6 +458,7 @@ STATIC const mp_rom_map_elem_t ulab_linalg_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_ones), (mp_obj_t)&linalg_ones_obj },
     { MP_ROM_QSTR(MP_QSTR_eye), (mp_obj_t)&linalg_eye_obj },
     { MP_ROM_QSTR(MP_QSTR_eig), (mp_obj_t)&linalg_eig_obj },
+    { MP_ROM_QSTR(MP_QSTR_cholesky), (mp_obj_t)&linalg_cholesky_obj },    
 	{ MP_ROM_QSTR(MP_QSTR_cholesky), (mp_obj_t)&linalg_cholesky_obj },
 };
 
