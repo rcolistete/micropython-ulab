@@ -413,37 +413,38 @@ mp_obj_t linalg_cholesky(mp_obj_t oin) {
 	if((ndarray->ndim != 2) || (ndarray->shape[0] != ndarray->shape[1])) {
 		mp_raise_ValueError(translate("input must be square matrix"));
 	}
-	ndarray_obj_t *result = ndarray_new_dense_ndarray(2, ndarray->shape, NDARRAY_FLOAT);
-	mp_float_t *array = (mp_float_t *)result->array;
+	ndarray_obj_t *L = ndarray_new_dense_ndarray(2, ndarray->shape, NDARRAY_FLOAT);
+	mp_float_t *array = (mp_float_t *)L->array;
 	linalg_fill_float_matrix(ndarray, array);
     if(!linalg_matrix_is_symmetric(array, ndarray->shape[0])) {
 		m_del(mp_float_t, array, ndarray->len);
 		mp_raise_ValueError(translate("input matrix is asymmetric"));
 	}
+	// this is actually not needed, but Cholesky in numpy returns the lower triangular matrix
+	for(size_t i=0; i < ndarray->shape[0]; i++) { // rows
+		for(size_t j=i+1; j < ndarray->shape[0]; j++) { // columns
+			array[i*ndarray->shape[0] + j] = 0.0;
+		}
+	}	
 	mp_float_t sum = 0.0;
-	mp_float_t *diag = m_new(mp_float_t, ndarray->shape[0]);
-	for(size_t i=0; i < ndarray->shape[0]; i++) {
-		printf("i: %ld\n", i);
-		for(size_t j=i; j < ndarray->shape[0]; j++) {
-			printf("j: %ld\n", j);
-			sum=array[i*ndarray->shape[0] + j];
-			for(size_t k=i; k > 0; k--) {
-				printf("k: %ld\n", k);
-				sum -= 	array[i*ndarray->shape[0] + k] * array[j*ndarray->shape[0] + k]; 
+	for(size_t i=0; i < ndarray->shape[0]; i++) { // rows
+		for(size_t j=0; j <= i; j++) { // columns
+			sum = array[i*ndarray->shape[0] + j];
+			for(size_t k=0; k < j; k++) {
+				sum -= array[i*ndarray->shape[0] + k] * array[j*ndarray->shape[0] + k];
 			}
 			if(i == j) {
 				if(sum <= 0.0) {
 					mp_raise_ValueError(translate("matrix is not positive definite"));
-					m_del(mp_float_t, diag, ndarray->shape[0]);
+				} else {
+					array[i*ndarray->shape[0]+i] = MICROPY_FLOAT_C_FUN(sqrt)(sum);
 				}
-				diag[i] = MICROPY_FLOAT_C_FUN(sqrt)(sum);
 			} else {
-				array[j*ndarray->shape[0] + i] = sum / diag[i];
+				array[i*ndarray->shape[0] + j] = sum / array[j*ndarray->shape[0]+j];
 			}
 		}
 	}
-	m_del(mp_float_t, diag, ndarray->shape[0]);
-	return MP_OBJ_FROM_PTR(result);
+	return MP_OBJ_FROM_PTR(L);
 }
 
 MP_DEFINE_CONST_FUN_OBJ_1(linalg_cholesky_obj, linalg_cholesky);
@@ -458,7 +459,6 @@ STATIC const mp_rom_map_elem_t ulab_linalg_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_ones), (mp_obj_t)&linalg_ones_obj },
     { MP_ROM_QSTR(MP_QSTR_eye), (mp_obj_t)&linalg_eye_obj },
     { MP_ROM_QSTR(MP_QSTR_eig), (mp_obj_t)&linalg_eig_obj },
-    { MP_ROM_QSTR(MP_QSTR_cholesky), (mp_obj_t)&linalg_cholesky_obj },    
 	{ MP_ROM_QSTR(MP_QSTR_cholesky), (mp_obj_t)&linalg_cholesky_obj },
 };
 
