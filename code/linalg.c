@@ -169,6 +169,30 @@ static mp_obj_t linalg_dot(mp_obj_t _m1, mp_obj_t _m2) {
 
 MP_DEFINE_CONST_FUN_OBJ_2(linalg_dot_obj, linalg_dot);
 
+static mp_obj_t linalg_cross(mp_obj_t _a, mp_obj_t _b) {
+    // TODO: should the results be upcast?
+    if (!MP_OBJ_IS_TYPE(_a, &ulab_ndarray_type) || !MP_OBJ_IS_TYPE(_b, &ulab_ndarray_type)) {
+        mp_raise_TypeError(translate("arguments must be ndarrays"));
+    }
+    ndarray_obj_t *a = MP_OBJ_TO_PTR(_a);
+    ndarray_obj_t *b = MP_OBJ_TO_PTR(_b);
+    if (((a->m != 1) && (a->n != 1)) || ((b->m != 1) && (b->n != 1)) || (a->array->len != b->array->len) || (a->array->len != 3)) {
+        mp_raise_ValueError(translate("cross is defined for 1D arrays of 3 dimensions"));
+    }
+    // TODO: numpy uses upcasting here
+    ndarray_obj_t *out = create_new_ndarray(1, 3, NDARRAY_FLOAT);
+    mp_float_t *outdata = (mp_float_t *)out->array->items;
+    outdata[0] = ndarray_get_float_value(a->array->items, a->array->typecode, 1)*ndarray_get_float_value(b->array->items, b->array->typecode, 2);
+    outdata[0] -= ndarray_get_float_value(a->array->items, a->array->typecode, 2)*ndarray_get_float_value(b->array->items, b->array->typecode, 1);
+    outdata[1] = -ndarray_get_float_value(a->array->items, a->array->typecode, 0)*ndarray_get_float_value(b->array->items, b->array->typecode, 2);
+    outdata[1] += ndarray_get_float_value(a->array->items, a->array->typecode, 2)*ndarray_get_float_value(b->array->items, b->array->typecode, 0);
+    outdata[2] = ndarray_get_float_value(a->array->items, a->array->typecode, 0)*ndarray_get_float_value(b->array->items, b->array->typecode, 1);
+    outdata[2] -= ndarray_get_float_value(a->array->items, a->array->typecode, 1)*ndarray_get_float_value(b->array->items, b->array->typecode, 0);
+    return MP_OBJ_FROM_PTR(out);
+}
+
+MP_DEFINE_CONST_FUN_OBJ_2(linalg_cross_obj, linalg_cross);
+
 static mp_obj_t linalg_det(mp_obj_t oin) {
     ndarray_obj_t *in = linalg_object_is_square(oin);  
     mp_float_t *tmp = m_new(mp_float_t, in->n*in->n);
@@ -393,6 +417,7 @@ STATIC const mp_rom_map_elem_t ulab_linalg_globals_table[] = {
 	{ MP_ROM_QSTR(MP_QSTR_size), (mp_obj_t)&linalg_size_obj },
 	{ MP_ROM_QSTR(MP_QSTR_inv), (mp_obj_t)&linalg_inv_obj },
 	{ MP_ROM_QSTR(MP_QSTR_dot), (mp_obj_t)&linalg_dot_obj },
+	{ MP_ROM_QSTR(MP_QSTR_cross), (mp_obj_t)&linalg_cross_obj },
 	{ MP_ROM_QSTR(MP_QSTR_det), (mp_obj_t)&linalg_det_obj },
 	{ MP_ROM_QSTR(MP_QSTR_eig), (mp_obj_t)&linalg_eig_obj },
 	{ MP_ROM_QSTR(MP_QSTR_cholesky), (mp_obj_t)&linalg_cholesky_obj },
